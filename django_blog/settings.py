@@ -60,7 +60,9 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'djust.theming.context_processors.theme_context',
+                # 轻量版：只给模板需要的主题标量，避免 ~84KB 主题组件 HTML
+                # 被序列化进 LiveView state 并触发 Large LiveView state 警告。
+                'blog.theme_context_light.theme_context_light',
             ],
         },
     },
@@ -74,7 +76,9 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'djust.theming.context_processors.theme_context',
+                # 轻量版：只给模板需要的主题标量，避免 ~84KB 主题组件 HTML
+                # 被序列化进 LiveView state 并触发 Large LiveView state 警告。
+                'blog.theme_context_light.theme_context_light',
             ],
         },
     },

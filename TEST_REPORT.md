@@ -266,7 +266,7 @@
 - 每个 SSE 事件都会**全量重渲染整个 `dj-root`**（50–58KB HTML）再算 diff，不是局部更新。
 - 搜索框 `dj-debounce="300"`：实测从输入到结果更新 449ms，其中 300ms 是刻意等待用户停止打字，服务端约 150ms。
 
-**关于 `Large LiveView state 133.7KB` 警告**：整改后仍在。这个数字主要是 djust 自己保存的 VDOM 快照 / 模板 AST，不是我们放在实例上的 Post 列表；把列表移出实例属性后该数字几乎不变（135.4 → 133.7KB），但交互链路确实变短（SSE message 往返 53ms → 31ms）。它是内存占用提示，不是功能缺陷。
+**关于 `Large LiveView state 133.7KB` 警告**：当时判断为「框架固有的 VDOM 快照」，第十二节深挖后确认是**误判**——真正来源是模板 context 里约 84KB 前台完全没用到的主题组件 HTML，见 12.2。该警告已在第十二轮从根源消除。
 
 ### 11.4 本轮改动
 
@@ -307,7 +307,89 @@
 
 ### 11.8 残留事项与可选进一步优化
 
-1. `DjustPerformanceWarning: Large LiveView state ~133KB` 仍在，属框架 VDOM 快照，功能不受影响；如需消除要改 LiveView 架构（streams / 拆小 `dj-root`），本轮未动。
+1. `DjustPerformanceWarning: Large LiveView state ~133KB` 当时判定为框架固有开销、本轮未处理；**第十二轮已从根源消除**，见 12.2–12.4。
 2. 搜索仍有 300ms 前端 debounce。若还觉得打字反馈慢，可把 `dj-debounce` 降到 200ms，但会增加 SSE 请求频率。
 3. 第九节记录的两条非致命提示（`StreamingHttpResponse` 同步迭代器、主题状态体积）依旧存在。
 4. 本轮改动**尚未上线**，线上仍是「墨韵」上一版；等你确认后再同步原分享链接并复核。
+
+---
+
+## 十二、第十三轮：消除 `Large LiveView state` 警告（2026-11-15）
+
+### 12.1 现象
+
+在自己终端 `./start.sh` 后访问首页，stderr 稳定出现：
+
+```
+DjustPerformanceWarning: Large LiveView state detected for
+'r9nxq3gssc3stbzzt35ft2sbp3cfjv66_liveview_/_t6b0515a0': 134–136KB
+(threshold: 100KB)
+```
+
+重启 granian 后依旧出现。
+
+### 12.2 定位：警告只在「同一会话第二次访问」触发
+
+`/home/simon/.cache/state_probe2.py` hook `InMemoryStateBackend.set`，把每次 `serialize_msgpack()` 的真实长度和捕获到的警告对齐：
+
+| 访问 | state 大小 |
+| --- | --- |
+| 首次 `GET /` | 27,413 B |
+| 同会话第二次 `GET /` | **136,940 B（133.7KB）** ← 触发警告 |
+
+`/home/simon/.cache/state_probe3.py` 解包 msgpack 对比两次结构：
+
+| 位置 | 内容 | 大小 |
+| --- | --- | --- |
+| `root/[0]` | 模板源码字符串（两次相同） | 27,400 B |
+| `root/[1]` | **模板 context dict（42 键，仅第二次出现）** | **109,331 B** |
+| └ `theme_panel` | 主题面板 HTML（前台未使用） | 39,810 B |
+| └ `posts` | 6 篇文章，每篇含完整 author dict | 23,969 B |
+| └ `theme_head` | 主题 head HTML | 20,365 B |
+| └ `theme_presets` | 71 个主题预设 | 12,200 B |
+| └ `theme_switcher` | 主题切换器 HTML | 7,254 B |
+| └ `theme_preset_selector` | 预设选择器 HTML | 3,789 B |
+| └ `theme_mode_toggle` | 模式切换按钮 HTML | 808 B |
+
+**约 84KB 是前台一个都没用到的主题组件**。它们由 `djust.theming.context_processors.theme_context` 预渲染后塞进模板 context，而 LiveView 会把整个 context 连同 VDOM 一起 msgpack 序列化进内存 state。第十一节把这笔账记到「框架 VDOM 快照」是误判，已更正。
+
+### 12.3 修复
+
+- 新增 `src/blog/theme_context_light.py`：只返回模板真正读取的 4 个标量（`theme_resolved_mode` / `theme_pack` / `theme_mode` / `theme_preset`），从 `get_theme_manager(request).get_state()` 取值，异常时回落默认浅色主题。
+- `settings.py` 两个 TEMPLATES 后端的 `context_processors` 都从 `djust.theming.context_processors.theme_context` 换成轻量版。
+- `base.html` 把 `{{ theme_head }}` 改回 `{% theme_head %}` 标签：该标签通过 `build_theme_head_context` 独立渲染，不占 context，因此 20KB HTML 不再进 state。上一轮为省一次标签渲染改成变量形式，反而把这段 HTML 塞进了 state；head 输出完整性与主题切换均已回归验证。
+
+**没有调阈值**：`STATE_SIZE_WARNING_KB` 仍是框架默认 100KB。警告消失是因为 state 真的变小，而不是把报警器调哑。
+
+### 12.4 结果
+
+| 页面（同会话第 2 次访问） | 修复前 | 修复后 |
+| --- | --- | --- |
+| 首页 | 133.7KB | **51.3KB** |
+| 文章列表 | 约 115KB | **31.6KB** |
+| 相册 | — | **13.0KB** |
+| 文章详情 | 约 101KB | **19.0KB** |
+| 捕获到的警告 | 每次必现 | **0 条** |
+
+9002 实例跑完全部 206 项回归后，stderr 只剩 `StreamingHttpResponse must consume synchronous iterators` 一条非致命提示。
+
+响应时间（热实例，12 次均值）：
+
+| 页面 | 最初 | 上一轮 | 本轮 |
+| --- | --- | --- | --- |
+| `/` | 350ms | 207ms | **151.8ms** |
+| `/posts/` | 251ms | 157ms | **108.8ms** |
+| `/gallery/` | 213ms | 132ms | **72.0ms** |
+| `/about/` | 113ms | 80ms | **23.9ms** |
+
+### 12.5 回归
+
+**206 项 0 失败**：HTTP 137 / 桌面 Firefox 40 / 移动端 29；控制台 0 错误，外观菜单展开、深色即时生效、cookie 持久化均通过。
+
+测试脚本自身修正：`NS_BINDING_ABORTED` 的忽略规则从「仅 `/djust/sse/` 路径」放宽到所有页面卸载取消的请求（VDitor 懒加载图标 `ant.js` 在切页时被取消属同类误报）；真实 4xx/5xx 仍由「静态资源无 4xx/5xx」独立断言覆盖。
+
+### 12.6 残留与可选后续
+
+1. `StreamingHttpResponse must consume synchronous iterators` 仍在：Django 对 SSE / 文件响应使用同步迭代器的性能提示，不影响功能。
+2. state 里的 `posts` 仍约 24KB（6 篇，每篇是完整 Django model + author 对象）。文章增至约 20+ 篇时可能再次接近 100KB。可选优化：列表 / 首页改传精简 dict（title / slug / url / excerpt / published_at / author 字符串 / tags），并截断 `content`；本轮未做。
+3. 本轮改动**尚未上线**，线上仍是更早的版本；等你确认后再同步原分享链接并复核。

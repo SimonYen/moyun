@@ -105,12 +105,11 @@ def admin_dashboard(request):
         ('已发布', len(published), '篇'),
         ('草稿', len(posts) - len(published), '篇'),
         ('标签', len(tags), '个'),
-        ('累计点赞', sum(p.likes for p in posts), '次'),
         ('本月发布', sum(1 for d in dates if d >= month_start), '篇'),
     ]
     recent = [
         (p.title, p.get_absolute_url(), p.status,
-         timezone.localtime(p.published_at or p.created_at).strftime('%Y-%m-%d'), p.likes)
+         timezone.localtime(p.published_at or p.created_at).strftime('%Y-%m-%d'))
         for p in posts[:6]
     ]
 

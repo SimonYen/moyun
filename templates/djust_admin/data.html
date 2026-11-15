@@ -85,7 +85,7 @@ input[type=file] { font-size:12px; max-width:230px; }
   <section class="io-grid">
     <div class="panel">
       <h3>博客数据 · 导出 / 导入</h3>
-      <div class="hint">导出 JSON：文章标题、正文、标签、状态、点赞与时间。导入按 slug 合并，同名更新、新名新建，不会删除现有文章。</div>
+      <div class="hint">导出 JSON：文章标题、正文、标签、状态与时间。导入按 slug 合并，同名更新、新名新建，不会删除现有文章；旧版备份里的点赞字段会自动忽略。</div>
       <div class="io-row" style="margin-bottom:12px"><a class="btn primary" href="/admin/data/blog/export/">下载博客 JSON</a></div>
       <form class="io-row" method="post" action="/admin/data/blog/import/" enctype="multipart/form-data">
         {% csrf_token %}

@@ -224,3 +224,90 @@
 ### 10.6 线上状态
 
 本轮改动**尚未同步到线上分享链接**。按发布平台规则，覆盖线上内容需要你本轮明确确认后再执行；确认后仍沿用原链接 `https://djust-blog.app.workbuddy.host/?sharecode=35IPXHTHEO`，并按惯例复核页面、VDitor / 字体静态资源与后台登录。
+
+---
+
+## 十一、第十二轮：卡顿剖析与性能整改（2026-11-15）
+
+### 11.1 实测方法
+
+- `/home/simon/.cache/perf_probe.py`：各页面 8 次 HTTP 计时；首页在 5 组 CSS 变体下各采样 2.6 秒 `requestAnimationFrame` 帧间隔（静止 + 滚动）；记录长任务、字体分片请求、SSE 往返、搜索交互延迟。变体为 A 原样 / B 禁墨晕动画 / C 移除墨晕层 / D 禁 header 毛玻璃 / E 两者都禁。
+- `/home/simon/.cache/perf_profile.py`：`cProfile` 剖析 3 次首页 LiveView GET，拆开 Python 侧调用树。
+
+### 11.2 结论一：墨汁动画不是主要瓶颈，但按授权取消
+
+| 变体 | 静止 fps | p95 帧间隔 | 滚动 fps |
+| --- | --- | --- | --- |
+| A 原样 | 60.0 | 17.3ms | 60.0 |
+| B 禁墨晕动画 | 60.4 | 17.2ms | 60.0 |
+| C 移除墨晕层 | 60.4 | 17.2ms | 60.0 |
+| D 禁 header 毛玻璃 | 59.6 | 17.4ms | 60.0 |
+| E 两者都禁 | 60.4 | 17.2ms | 60.0 |
+
+五组都是满帧、p95 约 17.2ms、长任务 0。也就是说动画本身没有 canvas / rAF / JS 定时器，在测试环境里不产生主线程开销。但真机上仍有风险：3 个 46vmax 渐变层带 `scale()` 变换，叠加 sticky header 的 `backdrop-filter: blur(10px)` 会要求浏览器每帧重新采样整条 header 背后的像素，低端设备 / 移动端容易掉帧。按你的授权，**取消动态特性**：删掉全部 `@keyframes`、`will-change`、`visibilitychange` 暂停逻辑，只保留静态渐变纹理（首次栅格化后零运行时开销），并把 header 改为不透明底色、去掉毛玻璃。
+
+### 11.3 结论二：Rust 引擎确实不慢，慢在它外围的 Python 层
+
+`cProfile`（3 次首页 GET）优化前总计 **1.815s**，优化后 **0.829s**：
+
+| 环节 | 优化前 | 优化后 | 说明 |
+| --- | --- | --- | --- |
+| `RustLiveView.render`（6 次） | 0.421s（约 41ms/次） | 0.168s（约 28ms/次） | Rust 引擎本体，只占整条链路 15–20% |
+| `render_with_diff`（3 次） | 0.107s | 0.041s | VDOM diff |
+| `theme_context` 上下文处理器（6 次） | **0.637s** | **0.254s** | 每次 GET 跑 2 次；888 次 `get_state()`、12 次枚举主题预设，并预渲染 4 个主题组件（面板 / 预设选择器等前台根本没用） |
+| context 序列化 `normalize_django_value`（7152 次） | 0.232s | 明显下降 | 把 Django model 对象（含 Markdown 正文）转成 Rust 可消费的字典 |
+| `_sync_state_to_rust` | 0.176s | 下降 | 135KB LiveView state |
+| SQLite commit | 0.018s | 0.018s | 数据库本身几乎不耗时 |
+
+**所以「有 Rust 引擎还这么慢」并不矛盾**：Rust 只负责渲染 + diff 那 30–40ms，时间花在它前面的主题系统、对象序列化、状态同步，以及它后面的 SSE 传输。
+
+其它固有开销：
+- `LIVEVIEW_CONFIG['use_websocket'] = False`：每次交互是一次 HTTP POST + EventSource 推送，比 WebSocket 多一次往返。
+- 每个 SSE 事件都会**全量重渲染整个 `dj-root`**（50–58KB HTML）再算 diff，不是局部更新。
+- 搜索框 `dj-debounce="300"`：实测从输入到结果更新 449ms，其中 300ms 是刻意等待用户停止打字，服务端约 150ms。
+
+**关于 `Large LiveView state 133.7KB` 警告**：整改后仍在。这个数字主要是 djust 自己保存的 VDOM 快照 / 模板 AST，不是我们放在实例上的 Post 列表；把列表移出实例属性后该数字几乎不变（135.4 → 133.7KB），但交互链路确实变短（SSE message 往返 53ms → 31ms）。它是内存占用提示，不是功能缺陷。
+
+### 11.4 本轮改动
+
+| 项 | 改动 |
+| --- | --- |
+| 动态背景 | 移除全部动画与暂停逻辑，保留静态墨韵渐变；header 去 `backdrop-filter` |
+| 主题渲染 | `{% theme_head %}` → `{{ theme_head }}`（djust 官方推荐的预渲染变量），避免把同一个标签再渲染一遍；已核对 head 输出完整（critical CSS / deferred.css / components.css / theme.js / print.css 全在，未被转义） |
+| LiveView state | `HomeView` / `PostListView` / `PostDetailView` 不再把文章对象、标签列表、整篇 Post 存在实例上；实例只留 `query` / `tag_slug` / `slug` 标量，列表统一在 `get_context_data()` 现查（SQLite 本地查询几毫秒，远便宜于序列化上百 KB） |
+| 点赞与模型 | 见 11.5 |
+| 回归脚本 | 点赞断言改为「详情页已无点赞按钮」，墨晕断言改为「静态渐变 / 无动画 / 无毛玻璃」，旧备份 likes 用例改名 |
+
+### 11.5 点赞功能移除与数据库模型整理
+
+- `Post.likes` 字段删除，生成并应用迁移 `src/blog/migrations/0002_remove_post_likes.py`（`RemoveField`）。当前 `blog_post` 表 10 列：`id, title, slug, excerpt, content, status, created_at, updated_at, published_at, author_id`。
+- 同步清理：详情页点赞按钮与 `PostDetailView.like` 事件 / `likes` 上下文、文章列表的 `♥ {{ post.likes }}`、后台 `PostAdmin` 的 `readonly_fields` 与「Stats & timestamps」字段组（中文化为「时间戳」）、仪表盘「累计点赞」统计与「赞」列、导出 JSON 的 `likes` 字段、导入逻辑（旧版备份里的 `likes` 直接忽略，仍兼容）、数据页提示文案。
+- 数据完整性：迁移后 **6 篇文章 / 5 标签 / 6 图片** 全部保留，`django_migrations` 已记录 `0001_initial` 与 `0002_remove_post_likes`。
+
+### 11.6 优化效果
+
+| 指标 | 优化前 | 优化后 | 变化 |
+| --- | --- | --- | --- |
+| 首页 GET | 350ms | **207ms** | −41% |
+| 文章列表 GET | 251ms | **157ms** | −37% |
+| 相册 GET | 213ms | **132ms** | −38% |
+| 关于页 GET（纯 Django 视图） | 113ms | **80ms** | −29% |
+| cProfile 3 次首页 | 1.815s | **0.829s** | −54% |
+| SSE message 往返 | 53ms | **31ms** | −41% |
+| 搜索输入 → 结果 | 509ms | **449ms** | −12%（300ms 是 debounce） |
+
+### 11.7 回归结果
+
+| 层面 | 结果 |
+| --- | --- |
+| HTTP 全量（`full_test_http.py`） | **137 / 137 通过** |
+| 桌面 Firefox（`browser_full.py`） | **40 / 40 通过**，控制台 0 错误 |
+| 移动端 390×844（`browser_mobile.py`） | **29 / 29 通过** |
+| 合计 | **206 项，失败 0 项** |
+
+### 11.8 残留事项与可选进一步优化
+
+1. `DjustPerformanceWarning: Large LiveView state ~133KB` 仍在，属框架 VDOM 快照，功能不受影响；如需消除要改 LiveView 架构（streams / 拆小 `dj-root`），本轮未动。
+2. 搜索仍有 300ms 前端 debounce。若还觉得打字反馈慢，可把 `dj-debounce` 降到 200ms，但会增加 SSE 请求频率。
+3. 第九节记录的两条非致命提示（`StreamingHttpResponse` 同步迭代器、主题状态体积）依旧存在。
+4. 本轮改动**尚未上线**，线上仍是「墨韵」上一版；等你确认后再同步原分享链接并复核。

@@ -12,10 +12,6 @@
       <div class="article-meta">
         <span class="label">{{ post.published_at|date:"Y.m.d H:i" }}</span>
         
-        <button class="like-btn" dj-click="like">
-          <span>♥</span>
-          <span class="mono">{{ likes }}</span>
-        </button>
         <div class="tag-row">
           {% for tag in post.tags.all %}
             <a class="tag-pill" href="{% url 'blog:tag_detail' tag.slug %}">{{ tag.name }}</a>

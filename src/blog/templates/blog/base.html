@@ -8,7 +8,7 @@
 <link rel="icon" type="image/png" sizes="256x256" href="{% static 'favicon.png' %}">
 <link rel="apple-touch-icon" href="{% static 'favicon.png' %}">
 {% djust_client_config %}
-{% theme_head %}
+{{ theme_head }}
 <link rel="stylesheet" href="{% static 'css/lxgwwenkai-bold.css' %}">
 <style>
 /* 字体：霞鹜文楷，本地加载 */
@@ -82,8 +82,9 @@ a:hover { color: hsl(var(--link-hover)); }
 /* header 与齿轮外观面板（只用主题 token，不依赖 components.css） */
 .site-header {
   position: sticky; top: 0; z-index: 50;
-  background: hsl(var(--background) / 0.85);
-  backdrop-filter: blur(10px);
+  /* 不用 backdrop-filter：大面积动态背景会让浏览器每帧重新采样整条 header 的模糊，
+     低端设备 / 移动端掉帧明显。改成不透明底色，零合成开销。 */
+  background: hsl(var(--background));
   border-bottom: 1px solid hsl(var(--border));
 }
 .site-header .shell {
@@ -293,19 +294,6 @@ a:hover { color: hsl(var(--link-hover)); }
   border: 1px solid hsl(var(--border)); padding: 8px 12px; text-align: left;
 }
 .article-body th { background: hsl(var(--surface-2)); }
-.like-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  font: inherit; font-size: 0.85rem; cursor: pointer;
-  padding: 8px 16px; border-radius: calc(var(--radius) * 2);
-  border: 1px solid hsl(var(--border));
-  background: hsl(var(--card)); color: hsl(var(--foreground));
-  transition: all .15s ease;
-}
-.like-btn:hover { border-color: hsl(var(--primary)); color: hsl(var(--primary)); }
-.like-btn.liked {
-  background: hsl(var(--primary) / 0.12);
-  border-color: hsl(var(--primary)); color: hsl(var(--primary));
-}
 .back-link { display: inline-flex; align-items: center; gap: 8px; }
 .empty-state {
   padding: 56px 24px; text-align: center;
@@ -323,9 +311,10 @@ a:hover { color: hsl(var(--link-hover)); }
   padding: 28px 24px;
 }
 
-/* ===== 墨汁流动背景：只用 transform / opacity 合成层动画，不做 blur、不逐帧重绘 ===== */
-/* 不给 main / header 之外的内容层设 z-index：否则会新建层叠上下文，
-   把相册灯箱压到 sticky header 下面，关闭按钮点不到。墨晕用负层级垫底即可。 */
+/* ===== 静态墨韵底纹：纯 CSS 渐变，首次栅格化后零运行时开销 ===== */
+/* 「墨汁流动」动画已取消：它没有 canvas/JS，但大面积逐帧合成配合 sticky header
+   的毛玻璃在真机 / 移动端仍会掉帧。保留纹理，去掉全部 animation / will-change。 */
+/* 不给内容层设 z-index：否则新建层叠上下文会把相册灯箱压到 header 下面。 */
 .ink-flow {
   position: fixed; inset: 0; z-index: -1;
   pointer-events: none; overflow: hidden;
@@ -334,8 +323,9 @@ a:hover { color: hsl(var(--link-hover)); }
 .ink-blob {
   position: absolute; display: block; border-radius: 50%;
   width: 46vmax; height: 46vmax;
-  will-change: transform;
-  /* 多层椭圆渐变叠成不规则的墨团；这是静态纹理，只有整层在 GPU 上平移，不重绘 */
+}
+.ink-a {
+  top: -10vmax; left: -8vmax;
   background:
     radial-gradient(ellipse 40% 34% at 36% 42%,
       hsl(var(--foreground) / 0.11) 0%,
@@ -346,8 +336,6 @@ a:hover { color: hsl(var(--link-hover)); }
     radial-gradient(circle at 50% 50%,
       hsl(var(--foreground) / 0.045) 0%, transparent 74%);
 }
-/* 墨团中心要落在视口内，否则只露出透明的边缘，看起来像没有效果 */
-.ink-a { top: -10vmax; left: -8vmax; animation: ink-drift-a 54s ease-in-out infinite alternate; }
 .ink-b {
   bottom: -12vmax; right: -8vmax;
   background:
@@ -356,29 +344,13 @@ a:hover { color: hsl(var(--link-hover)); }
       hsl(var(--primary) / 0.05) 50%, transparent 76%),
     radial-gradient(circle at 45% 60%,
       hsl(var(--primary) / 0.055) 0%, transparent 72%);
-  animation: ink-drift-b 68s ease-in-out infinite alternate;
 }
 .ink-c {
   top: 22%; left: 30%; width: 36vmax; height: 36vmax;
   background: radial-gradient(ellipse 44% 36% at 40% 60%,
     hsl(var(--foreground) / 0.07) 0%, transparent 74%);
-  animation: ink-drift-c 82s ease-in-out infinite alternate;
 }
-@keyframes ink-drift-a {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(14vmax, 10vmax, 0) scale(1.12); }
-}
-@keyframes ink-drift-b {
-  0%   { transform: translate3d(0, 0, 0) scale(1.05); }
-  100% { transform: translate3d(-13vmax, -9vmax, 0) scale(.94); }
-}
-@keyframes ink-drift-c {
-  0%   { transform: translate3d(0, 0, 0) scale(.95); }
-  100% { transform: translate3d(10vmax, -13vmax, 0) scale(1.15); }
-}
-.ink-paused .ink-blob { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
-  .ink-blob { animation: none !important; }
   .post-card, .btn, .gf-album-item, .gf-album-thumb, .gf-gear-btn svg { transition: none !important; }
 }
 
@@ -444,14 +416,12 @@ a:hover { color: hsl(var(--link-hover)); }
   .article-body pre { padding: 12px 14px; font-size: .82rem; -webkit-overflow-scrolling: touch; }
   .article-body table { display: block; overflow-x: auto; white-space: nowrap; }
   .article-body img { height: auto; }
-  .like-btn { min-height: 44px; padding: 9px 16px; }
   .feature-grid { grid-template-columns: 1fr; gap: 14px; }
   .site-footer { margin-top: 48px; }
   .site-footer .shell { flex-direction: column; gap: 6px; padding: 22px 16px; }
   .gf-menu { width: min(260px, calc(100vw - 32px)); }
-  /* 手机端只留一层静态偏慢的墨晕，省电省 GPU */
+  /* 手机端只留一层墨晕，减少首次栅格化面积 */
   .ink-b, .ink-c { display: none; }
-  .ink-a { animation-duration: 96s; }
 }
 </style>
 {% block extra_style %}{% endblock %}
@@ -627,11 +597,6 @@ a:hover { color: hsl(var(--link-hover)); }
     });
   }
 
-  // 切到后台标签时暂停墨晕动画：只在 visibilitychange 触发，没有常驻定时器
-  document.addEventListener('visibilitychange', function () {
-    document.documentElement.classList.toggle('ink-paused', document.hidden);
-  });
-  if (document.hidden) document.documentElement.classList.add('ink-paused');
 })();
 </script>
 

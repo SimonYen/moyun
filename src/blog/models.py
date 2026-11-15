@@ -41,7 +41,6 @@ class Post(models.Model):
         choices=Status.choices,
         default=Status.DRAFT,
     )
-    likes = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     published_at = models.DateTimeField(null=True, blank=True)

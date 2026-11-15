@@ -23,14 +23,14 @@ class PostAdmin(DjustModelAdmin):
     list_filter = ('status', 'tags')
     search_fields = ('title', 'content', 'excerpt')
     ordering = ('-published_at', '-created_at')
-    readonly_fields = ('created_at', 'updated_at', 'published_at', 'likes')
+    readonly_fields = ('created_at', 'updated_at', 'published_at')
     actions = ['make_published', 'make_draft', 'delete_selected']
     fieldsets = (
         (None, {
             'fields': ('title', 'slug', 'author', 'excerpt', 'content', 'tags', 'status'),
         }),
-        ('Stats & timestamps', {
-            'fields': ('likes', 'created_at', 'updated_at', 'published_at'),
+        ('时间戳', {
+            'fields': ('created_at', 'updated_at', 'published_at'),
         }),
     )
 

@@ -65,7 +65,6 @@ def export_blog(request):
             'excerpt': p.excerpt,
             'content': p.content,
             'status': p.status,
-            'likes': p.likes,
             'tags': list(p.tags.values_list('name', flat=True)),
             'created_at': _iso(p.created_at),
             'updated_at': _iso(p.updated_at),
@@ -122,10 +121,7 @@ def merge_blog(payload, user):
         post.content = str(item.get('content') or '')
         status = item.get('status')
         post.status = status if status in Post.Status.values else Post.Status.DRAFT
-        try:
-            post.likes = max(0, int(item.get('likes') or 0))
-        except (TypeError, ValueError):
-            post.likes = 0
+        # 旧版备份里的 likes 字段直接忽略（点赞功能已移除）
         post.save()
 
         tag_names = item.get('tags', [])

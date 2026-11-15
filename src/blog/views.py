@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 from urllib.parse import unquote, urlparse
 
 from django.db.models import Count, Q
@@ -23,21 +23,30 @@ def _published():
     )
 
 
+def _tags_with_counts():
+    return list(
+        Tag.objects.annotate(n=Count("posts")).filter(n__gt=0).order_by("-n", "name")
+    )
+
+
+# LiveView 的实例属性会被 djust 整个 msgpack 序列化进内存 state，每个会话一份，
+# 且每次 SSE 事件都要 load → 反序列化 → 执行 handler → 重渲染 → diff → save。
+# 早期把 self._posts（含完整 Markdown 正文）和 self._tags 存在实例上，
+# 实测首页/文章列表 state 达 118–135KB（框架阈值 100KB），是交互迟钝的主因。
+# 现在实例上只留 query / tag_slug / slug 这类标量，列表一律在渲染时现查：
+# SQLite 本地查询只要几毫秒，远比序列化上百 KB 便宜。
 class HomeView(LiveView):
     """Landing page: hero + latest posts + tag cloud."""
 
     template_name = "blog/home.html"
 
-    def mount(self, request, **kwargs):
-        self._posts = list(_published()[:6])
-        self._tags = list(
-            Tag.objects.annotate(n=Count("posts")).filter(n__gt=0).order_by("-n", "name")
-        )
-        self.total: int = _published().count()
-
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        context.update(posts=self._posts, tags=self._tags, total=self.total)
+        context.update(
+            posts=list(_published()[:6]),
+            tags=_tags_with_counts(),
+            total=_published().count(),
+        )
         return context
 
 
@@ -50,9 +59,8 @@ class PostListView(LiveView):
     def mount(self, request, **kwargs):
         self.query: str = ""
         self.tag_slug: str = kwargs.get("tag_slug", "") or ""
-        self._refresh()
 
-    def _filtered(self) -> List[Post]:
+    def _filtered(self):
         qs = _published()
         if self.tag_slug:
             qs = qs.filter(tags__slug=self.tag_slug)
@@ -64,35 +72,26 @@ class PostListView(LiveView):
             )
         return list(qs[:60])
 
-    def _refresh(self) -> None:
-        self._posts = self._filtered()
-        self._tags = list(
-            Tag.objects.annotate(n=Count("posts")).filter(n__gt=0).order_by("-n", "name")
-        )
-
     @event_handler()
     def search(self, value: str = "", **kwargs):
         """Live search-as-you-type (dj-input, debounced client-side)."""
         self.query = (value or "").strip()
-        self._refresh()
 
     @event_handler()
     def filter_tag(self, tag: str = "", **kwargs):
         """Toggle a tag filter chip."""
         self.tag_slug = "" if self.tag_slug == tag else tag
-        self._refresh()
 
     @event_handler()
     def clear_filters(self, **kwargs):
         self.query = ""
         self.tag_slug = ""
-        self._refresh()
 
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
         context.update(
-            posts=self._posts,
-            tags=self._tags,
+            posts=self._filtered(),
+            tags=_tags_with_counts(),
             query=self.query,
             tag_slug=self.tag_slug,
         )
@@ -110,27 +109,22 @@ class PostDetailView(LiveView):
         if not slug:
             # djust 的 SSE stream 把 /djust/sse/<uuid>/ 当作页面 URL 传给
             # dispatch_mount，resolve() 解析不到 slug，mount 会抛 Http404 并导致
-            # 客户端报「Failed to load view」、点赞等事件失效。
-            # EventSource 与 message POST 都带 Referer（真实文章页），据此兜底。
+            # 客户端报「Failed to load view」。EventSource 与 message POST 都带
+            # Referer（真实文章页），据此兜底。
             match = re.search(r"/posts/([^/?#]+)", urlparse(request.META.get("HTTP_REFERER", "")).path)
             if match:
                 slug = unquote(match.group(1))
-        self._post = get_object_or_404(_published(), slug=slug)
-        self.likes: int = self._post.likes
+        # 只存 slug，不把整篇 Post（含 Markdown 正文）塞进 state
+        self.slug = slug
 
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
+        post = get_object_or_404(_published(), slug=self.slug)
         related = list(
-            _published().exclude(pk=self._post.pk).order_by("-published_at")[:3]
+            _published().exclude(pk=post.pk).order_by("-published_at")[:3]
         )
-        context.update(post=self._post, likes=self.likes, related_posts=related)
+        context.update(post=post, related_posts=related)
         return context
-
-    @event_handler()
-    def like(self, **kwargs):
-        self.likes += 1
-        self._post.likes = self.likes
-        self._post.save(update_fields=["likes"])
 
 
 # 图床图片在文章里的引用：/media/images/<32hex>.<ext>，URL 恒定不变。
@@ -144,7 +138,7 @@ def _gallery_data():
     图片与文章不建外键：关系从正文里的 /media/ 引用反推，导入导出无需额外字段，
     文章改标签后相册自动跟着变。未被已发布文章引用的图片归入「未归档」。
     """
-    refs: Dict[str, List[Dict[str, Any]]] = {}
+    refs: Dict[str, list] = {}
     published = Post.objects.filter(status=Post.Status.PUBLISHED).prefetch_related('tags')
     for post in published:
         tags = [{'slug': t.slug, 'name': t.name} for t in post.tags.all()]

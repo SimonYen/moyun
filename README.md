@@ -2,7 +2,7 @@
 
 一个用 **Django 5.2 + djust 1.2.8** 写的博客示例：服务端 LiveView 交互、Markdown 写作、三套国风主题、后台数据看板、独立图床与相册。
 
-纯 ASGI / SSE，不需要 Node、不需要前端构建步骤，也不需要 WebSocket。
+纯 ASGI，LiveView 走 WebSocket（`/ws/live/`）；不需要 Node，也不需要前端构建步骤。若平台不转发 WebSocket upgrade，设 `BLOG_USE_WEBSOCKET=0` 可回退 SSE。
 
 ## 功能
 
@@ -16,8 +16,8 @@
 | 层 | 选型 |
 | --- | --- |
 | Web | Django 5.2.19 + djust 1.2.8（LiveView / Rust 模板引擎） |
-| 服务器 | granian 2.8.7，`--interface asginl --no-ws` |
-| 传输 | SSE（`/djust/sse/`），不走 WebSocket |
+| 服务器 | granian 2.8.7，`--interface asginl`（WebSocket 默认启用） |
+| 传输 | WebSocket（`/ws/live/` → `LiveViewConsumer`）；`BLOG_USE_WEBSOCKET=0` 时回退 SSE（`/djust/sse/`） |
 | 存储 | SQLite + 本地 `media/` 目录 |
 | 前端 | 无框架、无构建步骤；VDitor、霞鹜文楷、Tailwind 全部本地 `static/`，无外部 CDN 依赖 |
 
@@ -44,6 +44,7 @@ sh start.sh
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | 本地回环域名 | 逗号分隔；反代改写 Host 时必须配，否则所有 POST 被 CSRF 拦成 403 |
 | `PORT` | `8000` | 监听端口 |
 | `SKIP_DEMO_DATA` | 空 | 设为 `1` 跳过相册演示数据 |
+| `BLOG_USE_WEBSOCKET` | `1` | `1` = WebSocket（默认），`0` = 回退 SSE；ASGI 两条路由始终都在，切换只影响客户端 |
 
 > ⚠️ **上线前必做**
 > 1. 设置 `DJANGO_SECRET_KEY`；
@@ -95,7 +96,7 @@ sh start.sh
 
 ### 反代注意事项
 
-- 站点用 SSE，**不要**配置 WebSocket upgrade 转发。
+- 站点默认用 WebSocket：**必须**把 `/ws/live/` 的 `Upgrade` / `Connection` 头转发到后端（`ws://` 或 `wss://`），否则 LiveView 交互会退化成整页刷新。若平台不支持 WS，设 `BLOG_USE_WEBSOCKET=0` 走 SSE，此时按 SSE 要求保留长连接并关闭响应缓冲。
 - 反代改写 `Host` 时，`CSRF_TRUSTED_ORIGINS` 必须包含浏览器看到的 Origin，否则登录、上传、导入等 POST 全部 403。
 - `SECURE_PROXY_SSL_HEADER` 已按 `X-Forwarded-Proto: https` 配好。
 
@@ -112,7 +113,7 @@ sh start.sh
 
 图片与文章**没有外键**。`GalleryView` 扫描已发布文章正文里的 `/media/images/<32hex>.<ext>` 引用，把图片归到该文章的 Tag 下；未被任何文章引用的图片进入「未归档」。
 
-好处是导入导出不需要额外字段，文章换标签后相册自动跟着变。Lightbox 用的是 djust 的 `ImageLightbox` 服务端组件，翻页/关闭走 SSE 事件，键盘导航由页面一小段 JS 转成按钮点击。
+好处是导入导出不需要额外字段，文章换标签后相册自动跟着变。Lightbox 用的是 djust 的 `ImageLightbox` 服务端组件，翻页/关闭走 LiveView 事件，键盘导航由页面一小段 JS 转成按钮点击。
 
 ## 目录结构
 

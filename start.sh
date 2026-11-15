@@ -10,6 +10,8 @@ export DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-*}"
 export DJANGO_CSRF_TRUSTED_ORIGINS="${DJANGO_CSRF_TRUSTED_ORIGINS:-https://*.app.workbuddy.host,http://localhost,http://127.0.0.1}"
 export BLOG_ADMIN_PASSWORD="${BLOG_ADMIN_PASSWORD:-admin12345}"
 export SKIP_DEMO_DATA="${SKIP_DEMO_DATA:-}"
+# 传输模式：1 = WebSocket（默认），0 = 回退 SSE（平台不转发 WS 时用）
+export BLOG_USE_WEBSOCKET="${BLOG_USE_WEBSOCKET:-1}"
 
 # 使用 venv python（如果存在），否则使用系统 python
 if [ -f ".venv/bin/python" ]; then
@@ -39,11 +41,11 @@ if command -v pkill >/dev/null 2>&1; then
 fi
 sleep 1
 
-# 启动：asginl（Django 不实现 ASGI lifespan）+ no-ws（纯 SSE，无需 WS）
+# 启动：asginl（Django 不实现 ASGI lifespan）；granian 默认启用 WebSocket，
+# djust LiveView 走 /ws/live/。设 BLOG_USE_WEBSOCKET=0 则客户端退回 SSE。
 exec $PYTHON -m granian \
     --interface asginl \
     --host 0.0.0.0 \
     --port "$PORT" \
     --workers 1 \
-    --no-ws \
     django_blog.asgi:application

@@ -466,5 +466,78 @@ DjustPerformanceWarning: Large LiveView state detected for
 ### 13.6 遗留
 
 - 示例文章标题仍是早期的技术向内容（属于文章数据，不是界面文案）；若要换成随笔风格可直接在后台改标题，不影响本轮实现。
-- **已上线**：用户明确确认后重新部署，原分享链接不变 `https://djust-blog.app.workbuddy.host/?sharecode=35IPXHTHEO`。线上复核 **20 项全通过**（`~/.cache/online_verify.py`）：连续 12 次 `/posts/` 响应长度完全一致（54,773 B，说明没有残留旧进程分流）、首屏 3 篇、真实浏览器滚动 3→6 并提示「已经到底」、首页/关于/相册/文章详情/后台登录均 200、VDitor `dist/index.min.js` 与 `dist/index.css`、favicon、霞鹜文楷 CSS、Tailwind Play 全部 200、无控制台错误与失败请求。
+- **已上线（该链接随后按用户要求下线，见 14.1）**：用户明确确认后重新部署，原分享链接不变 `https://djust-blog.app.workbuddy.host/?sharecode=35IPXHTHEO`。线上复核 **20 项全通过**（`~/.cache/online_verify.py`）：连续 12 次 `/posts/` 响应长度完全一致（54,773 B，说明没有残留旧进程分流）、首屏 3 篇、真实浏览器滚动 3→6 并提示「已经到底」、首页/关于/相册/文章详情/后台登录均 200、VDitor `dist/index.min.js` 与 `dist/index.css`、favicon、霞鹜文楷 CSS、Tailwind Play 全部 200、无控制台错误与失败请求。
+
+---
+
+## 十四、恢复 WebSocket 传输 + 与 SSE 的 A/B 量化
+
+### 14.1 背景
+
+用户指出最终部署平台肯定支持 WebSocket，怀疑之前的卡顿与 SSE 有关，要求：下线 WorkBuddy 平台实例、恢复 WebSocket、本地全面测试。已按要求 `action=unpublish` 下线「墨韵」，原分享链接 `https://djust-blog.app.workbuddy.host/?sharecode=35IPXHTHEO` 已失效（只是 WEB 发布下线，应用本体仍在设置里）。
+
+回顾：SSE 不是 djust 的限制，是**当时云网关不转发 WebSocket upgrade（实测 404/403）**才切过去的（第十一～十三节的「纯 SSE」描述只适用于那个平台）。djust 默认就是 `use_websocket: True`，官方脚手架提供 `ProtocolTypeRouter` + `/ws/live/` → `LiveViewConsumer`；`channels` / `daphne` 一直是它的传递依赖。
+
+### 14.2 改动
+
+| 文件 | 改动 |
+| --- | --- |
+| `django_blog/asgi.py` | 从纯 HTTP `ASGIStaticFilesHandler(get_asgi_application())` 改为 `ProtocolTypeRouter`：`http` 保持静态文件 handler，`websocket` 走 `AllowedHostsOriginValidator(AuthMiddlewareStack(URLRouter([path("ws/live/", LiveViewConsumer.as_asgi())]))))`（djust 官方接法） |
+| `django_blog/settings.py` | 加 `CHANNEL_LAYERS = InMemoryChannelLayer`（`LiveViewConsumer` 分组广播要用）；`LIVEVIEW_CONFIG['use_websocket']` 改由 `BLOG_USE_WEBSOCKET` 控制，默认 `1` |
+| `start.sh` | `export BLOG_USE_WEBSOCKET="${BLOG_USE_WEBSOCKET:-1}"`；去掉 `--no-ws`（granian 的 `--ws` 本来默认 enabled） |
+| `django_blog/urls.py` | **未改**，`sse_urlpatterns` 保留作回退路由 |
+| `README.md` / `.env.example` | 技术栈、环境变量表、反代注意事项改成默认 WS + `BLOG_USE_WEBSOCKET=0` 回退 SSE |
+
+**切换只影响客户端连哪条路**：ASGI 两条路由始终都在，`BLOG_USE_WEBSOCKET=0` 不需要改任何源码即可退回 SSE。无限滚动实现保持第十三节的自写滚动 + `dj-click`（在 WS 下同样工作，无需替换）。
+
+### 14.3 验证
+
+| 套件 | 实例 | 结果 |
+| --- | --- | --- |
+| WS 传输专项（`~/.cache/ws_verify.py`） | 9020 | **13/13** |
+| HTTP 全量 A–J | 9020 | **137/137** |
+| 桌面 Firefox 全量 | 9020 | **40/40** |
+| 移动端 390×844 | 9020 | **29/29** |
+| 无限滚动专项 | 9020 | **24/24** |
+| 无限滚动专项（SSE 回退开关） | 9021（`BLOG_USE_WEBSOCKET=0`） | **24/24** |
+| **合计** | | **267 项 0 失败** |
+
+WS 专项实测：连 `ws://127.0.0.1:9020/ws/live/`，`liveViewInstance.ws.readyState === 1`，收到 `{"type":"connect",...}` 与 `mount` 帧；滚动加载与搜索都通过 WS 帧完成，**没有** `/djust/sse/*/message/` POST、**没有** `[LiveView] Events are falling back to full-page HTTP re-renders` 警告、**没有**整页导航。9020 服务日志无 `Large LiveView state` 警告（只剩静态文件响应那条非致命 `StreamingHttpResponse` 提示，与 SSE 无关）。
+
+### 14.4 A/B 性能（`~/.cache/perf_ws_vs_sse.py`）
+
+同机两个干净单实例：9020 = WS，9021 = SSE（`window.DJUST_USE_WEBSOCKET` 分别为 `true` / `false`）。交互延迟用浏览器内 `performance.now()` + `MutationObserver` 测「事件发出 → DOM 更新」，搜索含 `dj-debounce=300`（两种模式相同）。
+
+| 指标 | WS | SSE | 差 |
+| --- | --- | --- | --- |
+| GET `/` | 203.8 ms | 201.1 ms | +2.7 |
+| GET `/posts/` | 100.2 ms | 95.4 ms | +4.8 |
+| GET `/gallery/` | 90.5 ms | 98.5 ms | −8.0 |
+| GET `/about/` | 26.3 ms | 42.2 ms | −15.9 |
+| 加载更多（3→6 卡片） | 65.3 ms | 70.5 ms | **−5.2（−7%）** |
+| 搜索到空态 | 332.8 ms | 351.0 ms | **−18.2（−5%）** |
+
+### 14.5 结论：卡顿与传输方式基本无关
+
+- 页面首次加载（服务端渲染）几乎不受影响，四项的 ±2–16 ms 都在同机双实例负载波动范围内；绝对值比第十二节的基线略高也是因为同时跑两个实例，只看相对差。
+- WebSocket 确实省掉了每次交互的一次 HTTP POST 往返，但**在同机环回下只带来 5–7% / 5–18 ms**。搜索的 330–350 ms 里约 300 ms 是前端 debounce，传输只占零头。
+- 之前「太卡」的主因第十一、十二节已定位并修掉：`theme_context` 预渲染 ~84KB 无用主题组件、完整 Post model 进 context 被整包序列化、每次事件全量重渲染 dj-root。那些是服务端 Python 层开销，与 SSE/WS 无关。
+- **但 WS 仍值得开**：在真实公网（几十到上百 ms RTT）下，SSE 每次交互多一次完整 HTTP 往返，差距会放大到 RTT 量级；WS 也更省连接与请求头开销，且能重新启用 djust 依赖 WebSocket 的能力（如 `dj-viewport-bottom`、async `stream_insert`）。当前无限滚动实现已稳定，暂不替换。
+
+### 14.6 部署到最终平台的注意点
+
+1. 反代**必须**把 `/ws/live/` 的 `Upgrade` / `Connection` 头转发到后端，并放行长连接；`wss://` 场景要正确透传 `X-Forwarded-Proto`。
+2. `ALLOWED_HOSTS` 决定 `AllowedHostsOriginValidator` 放行哪些 Origin；生产改成真实域名后，浏览器看到的 Origin 必须在列表里，否则 WS 握手会被拒（CSWSH 防护）。
+3. 多 worker / 多实例部署时 `InMemoryChannelLayer` 不跨进程，广播类功能需要换 Redis channel layer；本项目单 worker、`--workers 1`，内存层够用。
+4. 万一平台实际不支持 WS：`BLOG_USE_WEBSOCKET=0 sh start.sh` 即可回退 SSE，已实测 24/24 功能正常。
+
+### 14.7 本地查看效果
+
+```sh
+sh start.sh                 # 默认 8000 端口、WebSocket 模式
+# 或指定端口
+PORT=8000 sh start.sh
+```
+
+打开 `http://127.0.0.1:8000/`。在浏览器控制台里 `window.DJUST_USE_WEBSOCKET` 应为 `true`，`window.djust.liveViewInstance.ws.readyState` 应为 `1`；网络面板能看到一条 `ws://.../ws/live/` 长连接，交互时是帧而不是 `/djust/sse/` POST。
 

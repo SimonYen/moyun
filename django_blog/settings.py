@@ -84,8 +84,18 @@ TEMPLATES = [
     },
 ]
 
+# 传输模式：默认 WebSocket（djust 原生 LiveView 传输，一次交互一次往返）。
+# 平台不转发 WebSocket upgrade 时设 BLOG_USE_WEBSOCKET=0 回退 SSE；
+# asgi.py 两条路由始终都在，切换只影响客户端连哪条。
+USE_WEBSOCKET = os.environ.get('BLOG_USE_WEBSOCKET', '1') != '0'
+
+# LiveViewConsumer 用 channel layer 做分组广播；单 worker 内存层足够。
+CHANNEL_LAYERS = {
+    'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
+}
+
 LIVEVIEW_CONFIG = {
-    'use_websocket': False,
+    'use_websocket': USE_WEBSOCKET,
     'theme': {
         'pack': 'cn_shuimo',
         'default_mode': 'light',

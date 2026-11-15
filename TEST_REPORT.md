@@ -466,5 +466,5 @@ DjustPerformanceWarning: Large LiveView state detected for
 ### 13.6 遗留
 
 - 示例文章标题仍是早期的技术向内容（属于文章数据，不是界面文案）；若要换成随笔风格可直接在后台改标题，不影响本轮实现。
-- 本轮及前几轮改动**尚未上线**，线上仍是更早版本；发布平台要求本轮明确说一次「发布 / 上线 / 部署」才允许覆盖原分享链接，等确认后再同步并复核 `/static/vditor/dist/index.min.js`。
+- **已上线**：用户明确确认后重新部署，原分享链接不变 `https://djust-blog.app.workbuddy.host/?sharecode=35IPXHTHEO`。线上复核 **20 项全通过**（`~/.cache/online_verify.py`）：连续 12 次 `/posts/` 响应长度完全一致（54,773 B，说明没有残留旧进程分流）、首屏 3 篇、真实浏览器滚动 3→6 并提示「已经到底」、首页/关于/相册/文章详情/后台登录均 200、VDitor `dist/index.min.js` 与 `dist/index.css`、favicon、霞鹜文楷 CSS、Tailwind Play 全部 200、无控制台错误与失败请求。
 

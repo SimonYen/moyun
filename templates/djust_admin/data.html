@@ -1,0 +1,184 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据管理 | 墨韵 · 后台</title>
+{% load static %}<link rel="stylesheet" href="{% static "css/lxgwwenkai-bold.css" %}">
+<style>
+:root { --ink:#2b2b2b; --muted:#7b756c; --line:#e8e4dc; --paper:#faf8f4; --seal:#B3392C; --blue:#2A5CAA; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:"LXGW WenKai","Kaiti SC",Georgia,serif; }
+a { color:inherit; text-decoration:none; }
+.side { position:fixed; inset:0 auto 0 0; width:232px; background:#22201e; color:#e9e4da; padding:22px 16px; }
+.side h1 { margin:0 0 4px; font-size:18px; letter-spacing:.08em; }
+.side .sub { color:#8d8579; font-size:12px; margin-bottom:28px; }
+.side nav a { display:block; padding:10px 12px; border-radius:8px; font-size:14px; color:#c9c2b6; margin-bottom:4px; }
+.side nav a:hover { background:#35312c; color:#fff; }
+.side nav a.on { background:var(--seal); color:#fff; }
+.side .foot { position:absolute; bottom:22px; left:16px; right:16px; font-size:12px; color:#8d8579; border-top:1px solid #3a3631; padding-top:14px; }
+.main { margin-left:232px; padding:28px 32px 60px; max-width:1280px; }
+.head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:20px; }
+.head h2 { margin:0; font-size:24px; letter-spacing:.06em; }
+.head .who { color:var(--muted); font-size:13px; }
+.msg { background:#e8f2e9; color:#3d6b45; border-radius:8px; padding:11px 16px; font-size:13px; margin-bottom:18px; }
+.notice { background:#f6eee6; color:#8a6b3f; border-radius:8px; padding:12px 16px; font-size:12px; line-height:1.8; margin-bottom:20px; }
+.panel { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(43,43,43,.04); }
+.panel h3 { margin:0 0 4px; font-size:16px; letter-spacing:.05em; }
+.panel .hint { color:var(--muted); font-size:12px; line-height:1.7; margin-bottom:14px; }
+.io-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:22px; }
+.io-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.btn { display:inline-block; padding:9px 17px; border-radius:8px; border:1px solid var(--line); background:#fff; font:inherit; font-size:13px; cursor:pointer; }
+.btn:hover { border-color:var(--seal); color:var(--seal); }
+.btn.primary { background:var(--seal); border-color:var(--seal); color:#fff; }
+.btn.primary:hover { opacity:.9; color:#fff; }
+.btn.small { padding:5px 10px; font-size:12px; }
+.btn.danger { color:#a33a2c; }
+input[type=file] { font-size:12px; max-width:230px; }
+.gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; margin-top:16px; }
+.tile { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff; }
+.tile .pic { height:120px; background:#f4f1eb; display:flex; align-items:center; justify-content:center; }
+.tile .pic img { max-width:100%; max-height:100%; object-fit:contain; }
+.tile .meta { padding:9px 10px; font-size:11px; color:var(--muted); }
+.tile .meta b { display:block; color:var(--ink); font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tile .ops { display:flex; gap:6px; padding:0 10px 10px; }
+.empty { color:var(--muted); font-size:13px; padding:18px 0; }
+.counts { display:flex; gap:20px; color:var(--muted); font-size:12px; margin-bottom:16px; }
+.counts b { color:var(--seal); font-size:16px; }
+@media (max-width:1000px) { .io-grid { grid-template-columns:1fr; } }
+@media (max-width:760px) { .side { position:static; width:auto; } .side .foot { position:static; margin-top:18px; } .main { margin-left:0; padding:20px; } }
+</style>
+</head>
+<body>
+<aside class="side">
+  <h1>墨韵 · 后台</h1>
+  <div class="sub">内容管理与数据总览</div>
+  <nav>
+    <a href="/admin/">仪表盘</a>
+    <a href="/admin/blog/post/">文章管理</a>
+    <a href="/admin/blog/post/add/">写新文章</a>
+    <a href="/admin/blog/tag/">标签管理</a>
+    <a class="on" href="/admin/data/">数据与图床</a>
+    <a href="/gallery/">前台相册 ↗</a>
+    <a href="/">查看站点 ↗</a>
+  </nav>
+  <div class="foot">{{ username }} · <a href="/admin/logout/">退出登录</a></div>
+</aside>
+
+<main class="main">
+  <div class="head"><h2>数据与图床</h2><div class="who">博客与图片分开备份，互不耦合</div></div>
+  {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+  <div class="notice">
+    图片上传后保存在 <b>/media/images/</b>，文件名是不可变 UUID，Markdown 引用 <code>![说明](/media/images/xxx.png)</code> 长期有效。
+    博客导出只含文章与标签（JSON），图片导出才含二进制文件（ZIP）；两者可以分别备份、分别还原。
+    注意：每次代码上线会同步本地数据库，线上新写的文章请先用「博客导出」留档，或用部署前的同步脚本拉回本地。
+  </div>
+
+  <div class="counts">
+    <span><b>{{ post_count }}</b> 篇文章</span>
+    <span><b>{{ tag_count }}</b> 个标签</span>
+    <span><b>{{ image_count }}</b> 张图片</span>
+  </div>
+
+  <section class="io-grid">
+    <div class="panel">
+      <h3>博客数据 · 导出 / 导入</h3>
+      <div class="hint">导出 JSON：文章标题、正文、标签、状态、点赞与时间。导入按 slug 合并，同名更新、新名新建，不会删除现有文章。</div>
+      <div class="io-row" style="margin-bottom:12px"><a class="btn primary" href="/admin/data/blog/export/">下载博客 JSON</a></div>
+      <form class="io-row" method="post" action="/admin/data/blog/import/" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" name="archive" accept=".json,application/json" aria-label="博客 JSON 备份文件" required>
+        <button class="btn" type="submit">导入博客</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h3>图片数据 · 导出 / 导入</h3>
+      <div class="hint">导出 ZIP：images.json 元数据 + files/ 下的原图二进制。导入保持原文件名，已引用过的图片链接不会失效；相同内容自动去重。</div>
+      <div class="io-row" style="margin-bottom:12px"><a class="btn primary" href="/admin/data/images/export/">下载图片 ZIP</a></div>
+      <form class="io-row" method="post" action="/admin/data/images/import/" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" name="archive" accept=".zip,application/zip" aria-label="图片 ZIP 备份文件" required>
+        <button class="btn" type="submit">导入图片</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h3>图床 · 上传与管理</h3>
+    <div class="hint">支持 PNG / JPEG / GIF / WebP，单张不超过 5MB。在文章编辑器里也可以直接拖入或粘贴图片，会自动上传并插入 Markdown。</div>
+    <form id="gf-upload" class="io-row" method="post" action="/admin/data/images/upload/" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="file" name="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="要上传的图片" multiple required>
+      <button class="btn primary" type="submit">上传图片</button>
+      <span id="gf-upload-status" class="hint" style="margin:0"></span>
+    </form>
+
+    {% if images %}
+    <div class="gallery">
+      {% for img in images %}
+      <div class="tile">
+        <div class="pic"><img src="{{ img.url }}" alt="{{ img.name }}" loading="lazy"></div>
+        <div class="meta"><b title="{{ img.name }}">{{ img.name }}</b>{{ img.size_kb }} KB · {{ img.uploaded_at }}</div>
+        <div class="ops">
+          <button class="btn small" type="button" data-copy="![{{ img.name }}]({{ img.url }})">复制 Markdown</button>
+          <form method="post" action="/admin/data/images/{{ img.id }}/delete/" onsubmit="return confirm('确定删除这张图片？已引用它的文章会显示破图。');">
+            {% csrf_token %}
+            <button class="btn small danger" type="submit">删除</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">图床还是空的，上传一张图片试试。</div>
+    {% endif %}
+  </section>
+</main>
+
+<script>
+(function () {
+  var form = document.getElementById('gf-upload');
+  var status = document.getElementById('gf-upload-status');
+  var csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    status.textContent = '上传中…';
+    var files = form.querySelector('[name=file]').files;
+    var done = 0, failed = [];
+    if (!files.length) { status.textContent = '请选择图片'; return; }
+    Array.prototype.forEach.call(files, function (f) {
+      var fd = new FormData();
+      fd.append('file', f);
+      fetch('/admin/data/images/upload/', {
+        method: 'POST', credentials: 'same-origin', body: fd,
+        headers: { 'X-CSRFToken': csrf }
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.code !== 0) failed.push(f.name + ': ' + d.msg);
+      }).catch(function () { failed.push(f.name + ': 网络错误'); }).then(function () {
+        done += 1;
+        if (done === files.length) {
+          if (failed.length) { status.textContent = failed.join('；'); }
+          else { window.location.reload(); }
+        }
+      });
+    });
+  });
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-copy');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { btn.textContent = '已复制'; });
+      } else {
+        var i = document.createElement('textarea');
+        i.value = text; document.body.appendChild(i); i.select();
+        document.execCommand('copy'); i.remove(); btn.textContent = '已复制';
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

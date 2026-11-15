@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文章管理 | 墨韵 · 后台</title>
+<link rel="stylesheet" href="{% static 'css/lxgwwenkai-bold.css' %}">
+<link rel="stylesheet" href="{% static 'css/admin.css' %}">
+</head>
+<body>
+<aside class="side">
+  <h1>墨韵 · 后台</h1>
+  <div class="sub">内容管理与数据总览</div>
+  <nav>
+    <a href="/admin/">仪表盘</a>
+    <a class="on" href="/admin/blog/post/">文章管理</a>
+    <a href="/admin/blog/post/add/">写新文章</a>
+    <a href="/admin/blog/tag/">标签管理</a>
+    <a href="/admin/data/">数据与图床</a>
+    <a href="/">查看站点 ↗</a>
+  </nav>
+  <div class="foot">{{ username }} · <a href="/admin/logout/">退出登录</a></div>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h2>文章管理</h2>
+    <div class="who">共 {{ count }} 篇<a href="/admin/logout/">退出</a></div>
+  </div>
+
+  <div class="panel">
+    <div class="tools">
+      <a class="btn primary" href="/admin/blog/post/add/">＋ 写新文章</a>
+      <a class="btn" href="/admin/">返回仪表盘</a>
+    </div>
+    <table class="tbl">
+      <thead>
+        <tr><th>标题</th><th>状态</th><th class="hide-sm">标签</th><th class="hide-sm">更新</th><th>操作</th></tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td><a href="{{ r.edit_url }}">{{ r.title }}</a><div class="slug">{{ r.slug }}</div></td>
+          <td><span class="badge {{ r.badge_class }}">{{ r.status_label }}</span></td>
+          <td class="hide-sm">{{ r.tags }}</td>
+          <td class="hide-sm muted">{{ r.date }}</td>
+          <td class="ops"><a href="{{ r.view_url }}">查看</a><a href="{{ r.edit_url }}">编辑</a><a class="del" href="{{ r.del_url }}">删除</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="empty">{{ empty_note }}</p>
+  </div>
+</main>
+</body>
+</html>

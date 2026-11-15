@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+{% load static %}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% if post_title %}编辑 {{ post_title }}{% else %}写新文章{% endif %} | 墨韵 · 后台</title>
+<link rel="stylesheet" href="{% static 'css/lxgwwenkai-bold.css' %}">
+<link rel="stylesheet" href="{% static 'vditor/dist/index.css' %}">
+<style>
+:root { --ink:#2b2b2b; --muted:#7b756c; --line:#e8e4dc; --paper:#faf8f4; --seal:#B3392C; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:"LXGW WenKai","Kaiti SC",Georgia,serif; }
+a { color:inherit; text-decoration:none; }
+.side { position:fixed; inset:0 auto 0 0; width:232px; background:#22201e; color:#e9e4da; padding:22px 16px; }
+.side h1 { margin:0 0 4px; font-size:18px; letter-spacing:.08em; }
+.side .sub { color:#8d8579; font-size:12px; margin-bottom:28px; }
+.side nav a { display:block; padding:10px 12px; border-radius:8px; font-size:14px; color:#c9c2b6; margin-bottom:4px; }
+.side nav a:hover { background:#35312c; color:#fff; }
+.side nav a.on { background:var(--seal); color:#fff; }
+.side .foot { position:absolute; bottom:22px; left:16px; right:16px; font-size:12px; color:#8d8579; border-top:1px solid #3a3631; padding-top:14px; }
+.main { margin-left:232px; padding:28px 32px 60px; max-width:1100px; }
+.head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:18px; }
+.head h2 { margin:0; font-size:23px; letter-spacing:.06em; }
+.head a { color:var(--muted); font-size:13px; }
+.head a:hover { color:var(--seal); }
+.panel { background:#fff; border:1px solid var(--line); border-radius:12px; padding:24px; box-shadow:0 1px 3px rgba(43,43,43,.04); }
+.gf-msg { background:#e8f2e9; color:#3d6b45; border-radius:8px; padding:10px 14px; font-size:13px; margin-bottom:16px; }
+.gf-err { background:#fdecea; color:#a33a2c; border-radius:8px; padding:8px 12px; font-size:12px; margin-top:6px; }
+.gf-row { margin-bottom:20px; }
+.gf-row label { display:block; font-size:13px; margin-bottom:7px; color:#4a463f; }
+.gf-input { width:100%; padding:10px 12px; border:1px solid #dcd6cc; border-radius:8px; background:#fff; font:inherit; font-size:14px; color:var(--ink); }
+.gf-input:focus { outline:none; border-color:var(--seal); box-shadow:0 0 0 3px rgba(179,57,44,.10); }
+textarea.gf-input { resize:vertical; min-height:90px; }
+#id_content { min-height:420px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; }
+.gf-help { font-size:11px; color:var(--muted); margin-top:5px; }
+.gf-note { font-size:12px; color:#9a6a3d; margin:0 0 8px; }
+.gf-note b { color:var(--seal); }
+#id_tags { list-style:none; padding:0; margin:0; display:flex; flex-wrap:wrap; gap:8px 18px; }
+#id_tags li { font-size:13px; }
+#id_tags label { display:inline; font-size:13px; margin:0; }
+.gf-two { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.actions { display:flex; gap:10px; align-items:center; border-top:1px solid var(--line); padding-top:18px; margin-top:8px; }
+.btn { padding:10px 20px; border-radius:8px; border:1px solid var(--line); background:#fff; font:inherit; font-size:14px; cursor:pointer; }
+.btn:hover { border-color:var(--seal); color:var(--seal); }
+.btn.primary { background:var(--seal); border-color:var(--seal); color:#fff; }
+.btn.primary:hover { opacity:.9; color:#fff; }
+.actions .spacer { flex:1; }
+.actions .del { color:#a33a2c; font-size:13px; }
+.vditor { border-radius:8px; }
+@media (max-width:900px) { .gf-two { grid-template-columns:1fr; } }
+@media (max-width:760px) { .side { position:static; width:auto; } .side .foot { position:static; margin-top:18px; } .main { margin-left:0; padding:20px; } }
+</style>
+</head>
+<body>
+<aside class="side">
+  <h1>墨韵 · 后台</h1>
+  <div class="sub">内容管理与数据总览</div>
+  <nav>
+    <a href="/admin/">仪表盘</a>
+    <a class="on" href="/admin/blog/post/">文章管理</a>
+    <a href="/admin/blog/post/add/">写新文章</a>
+    <a href="/admin/blog/tag/">标签管理</a>
+    <a href="/admin/data/">数据与图床</a>
+    <a href="/">查看站点 ↗</a>
+  </nav>
+  <div class="foot">{{ username }} · <a href="/admin/logout/">退出登录</a></div>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h2>{% if post_title %}编辑文章{% else %}写新文章{% endif %}</h2>
+    <a href="/admin/blog/post/">← 返回文章列表</a>
+  </div>
+
+  {% if saved %}<div class="gf-msg">已保存，可以继续编辑。</div>{% endif %}
+
+  <form id="gf-post-form" class="panel" method="post">
+    {% csrf_token %}
+    {% for f in fields %}
+    <div class="gf-row{% if f.is_content %} gf-row-content{% endif %}">
+      <label for="{{ f.html_id }}">{{ f.label }}{% if f.required %} *{% endif %}</label>
+      {% if f.is_content %}
+      <div class="gf-note" id="gf-note"><b>所见即所得编辑器</b> · 可直接拖入或粘贴图片（自动上传图床），工具栏可切换源码 / 即时渲染 / 分屏预览</div>
+      <div id="gf-editor"></div>
+      {% endif %}
+      {{ f.html|safe }}
+      {% if f.help %}<div class="gf-help">{{ f.help }}</div>{% endif %}
+      {% if f.errors %}<div class="gf-err">{{ f.errors }}</div>{% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+      <button type="submit" class="btn primary">保存并返回</button>
+      <button type="submit" class="btn" name="action" value="continue">保存并继续编辑</button>
+      <span class="spacer"></span>
+      {% if post_pk %}<a class="del" href="/admin/blog/post/{{ post_pk }}/delete/">删除这篇文章</a>{% endif %}
+    </div>
+  </form>
+</main>
+
+<script>
+(function () {
+  var basePath = '{% static "vditor" %}';
+  var ta = document.getElementById('id_content');
+  var host = document.getElementById('gf-editor');
+  var form = document.getElementById('gf-post-form');
+  var note = document.getElementById('gf-note');
+  var csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+  var csrf = csrfInput ? csrfInput.value : '';
+  var ed = null;
+
+  function fallback() {
+    host.style.display = 'none';
+    ta.style.display = '';
+    note.innerHTML = '富文本编辑器资源未加载，已回退为 Markdown 源码编辑，功能不受影响。';
+  }
+
+  function boot() {
+    if (!window.Vditor) { fallback(); return; }
+    try {
+      ed = new window.Vditor(host, {
+        cdn: basePath,
+        mode: 'wysiwyg',
+        height: 520,
+        lang: 'zh_CN',
+        value: ta.value,
+        cache: { enable: false },
+        upload: {
+          url: '/admin/data/images/upload/',
+          fieldName: 'file',
+          max: 5 * 1024 * 1024,
+          accept: 'image/png,image/jpeg,image/gif,image/webp',
+          multiple: false,
+          headers: { 'X-CSRFToken': csrf }
+        },
+        toolbar: ['emoji', 'headings', 'bold', 'italic', 'strike', 'link', '|',
+                  'list', 'ordered-list', 'check', 'quote', '|',
+                  'code', 'inline-code', 'table', 'line', '|',
+                  'undo', 'redo', 'edit-mode', 'both', 'preview', 'outline', 'fullscreen'],
+        input: function (v) { ta.value = v; }
+      });
+      window.__gfEditor = ed;
+      ta.style.display = 'none';
+      ta.removeAttribute('required');
+    } catch (e) { console.error('VDitor 初始化失败:', e); fallback(); }
+  }
+
+  form.addEventListener('submit', function (e) {
+    if (ed) ta.value = ed.getValue();
+    if (!ta.value.trim()) {
+      e.preventDefault();
+      note.textContent = '正文不能为空，请先写点内容。';
+      if (ed) { ta.style.display = ''; ta.focus(); }
+    }
+  });
+
+  if (window.Vditor) {
+    boot();
+  } else {
+    var s = document.createElement('script');
+    s.src = basePath + '/dist/index.min.js';
+    s.onload = function () { window.Vditor ? boot() : fallback(); };
+    s.onerror = function () { console.error('VDitor 脚本加载失败:', s.src); fallback(); };
+    document.head.appendChild(s);
+  }
+})();
+</script>
+</body>
+</html>

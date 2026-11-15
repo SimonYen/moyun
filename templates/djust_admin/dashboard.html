@@ -1,0 +1,132 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>仪表盘 | 墨韵 · 后台</title>
+{% load static %}<link rel="stylesheet" href="{% static "css/lxgwwenkai-bold.css" %}">
+<style>
+:root { --ink:#2b2b2b; --muted:#7b756c; --line:#e8e4dc; --paper:#faf8f4; --seal:#B3392C; --blue:#2A5CAA; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:"LXGW WenKai","Kaiti SC",Georgia,serif; }
+a { color:inherit; text-decoration:none; }
+.side { position:fixed; inset:0 auto 0 0; width:232px; background:#22201e; color:#e9e4da; padding:22px 16px; }
+.side h1 { margin:0 0 4px; font-size:18px; letter-spacing:.08em; }
+.side .sub { color:#8d8579; font-size:12px; margin-bottom:28px; }
+.side nav a { display:block; padding:10px 12px; border-radius:8px; font-size:14px; color:#c9c2b6; margin-bottom:4px; }
+.side nav a:hover { background:#35312c; color:#fff; }
+.side nav a.on { background:var(--seal); color:#fff; }
+.side .foot { position:absolute; bottom:22px; left:16px; right:16px; font-size:12px; color:#8d8579; border-top:1px solid #3a3631; padding-top:14px; }
+.side .foot a { color:#c9c2b6; }
+.main { margin-left:232px; padding:28px 32px 48px; max-width:1360px; }
+.head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:22px; }
+.head h2 { margin:0; font-size:24px; letter-spacing:.06em; }
+.head .who { color:var(--muted); font-size:13px; }
+.head .who a { margin-left:14px; color:var(--seal); }
+.cards { display:grid; grid-template-columns:repeat(6,1fr); gap:14px; margin-bottom:22px; }
+.card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 16px; box-shadow:0 1px 3px rgba(43,43,43,.04); }
+.card .k { color:var(--muted); font-size:12px; letter-spacing:.05em; }
+.card .v { font-size:30px; line-height:1.25; margin-top:6px; color:var(--seal); font-weight:700; }
+.card .u { font-size:12px; color:var(--muted); margin-left:4px; }
+.grid { display:grid; grid-template-columns:1.55fr 1fr; gap:18px; margin-bottom:18px; }
+.panel { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(43,43,43,.04); }
+.panel h3 { margin:0 0 4px; font-size:16px; letter-spacing:.05em; }
+.panel .hint { color:var(--muted); font-size:12px; margin-bottom:16px; }
+.heat { display:grid; grid-auto-flow:column; grid-template-rows:repeat(7,12px); grid-auto-columns:12px; gap:3px; overflow-x:auto; padding-bottom:6px; }
+.hm-cell { width:12px; height:12px; border-radius:2px; display:block; }
+.legend { display:flex; align-items:center; gap:5px; justify-content:flex-end; color:var(--muted); font-size:11px; margin-top:12px; }
+.legend i { width:11px; height:11px; border-radius:2px; display:inline-block; }
+.cal { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+.cal-dow { text-align:center; color:var(--muted); font-size:11px; padding-bottom:4px; }
+.cal-day { aspect-ratio:1; display:flex; align-items:center; justify-content:center; border:1px solid transparent; border-radius:7px; font-size:13px; background:#f6f3ee; }
+.cal-empty { background:transparent; }
+.cal-has { color:var(--seal); font-weight:700; }
+.cal-today { outline:2px solid var(--blue); outline-offset:-2px; }
+.cw { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 14px; min-height:150px; align-content:center; }
+.cw-word { line-height:1.35; white-space:nowrap; }
+.gf-empty { color:var(--muted); font-size:13px; }
+.recent { width:100%; border-collapse:collapse; font-size:14px; }
+.recent th { text-align:left; color:var(--muted); font-weight:400; font-size:12px; padding:0 10px 10px; border-bottom:1px solid var(--line); }
+.recent td { padding:11px 10px; border-bottom:1px solid #f2efe9; }
+.recent td a:hover { color:var(--seal); }
+.badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; }
+.badge.pub { background:#e8f2e9; color:#3d6b45; }
+.badge.draft { background:#f6eee6; color:#9a6a3d; }
+.quick { margin-top:6px; display:flex; gap:10px; }
+.quick a { padding:8px 16px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:13px; }
+.quick a:hover { border-color:var(--seal); color:var(--seal); }
+@media (max-width:1100px) { .cards { grid-template-columns:repeat(3,1fr); } .grid { grid-template-columns:1fr; } }
+@media (max-width:760px) { .side { position:static; width:auto; } .side .foot { position:static; margin-top:18px; } .main { margin-left:0; padding:20px; } .cards { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<aside class="side">
+  <h1>墨韵 · 后台</h1>
+  <div class="sub">内容管理与数据总览</div>
+  <nav>
+    <a class="on" href="/admin/">仪表盘</a>
+    <a href="/admin/blog/post/">文章管理</a>
+    <a href="/admin/blog/post/add/">写新文章</a>
+    <a href="/admin/blog/tag/">标签管理</a>
+    <a href="/admin/data/">数据与图床</a>
+    <a href="/">查看站点 ↗</a>
+  </nav>
+  <div class="foot">{{ username }} · <a href="/admin/logout/">退出登录</a></div>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h2>仪表盘</h2>
+    <div class="who">数据来自本站文章与标签<a href="/admin/logout/">退出</a></div>
+  </div>
+
+  <section class="cards">
+    {% for s in stats %}
+    <div class="card"><div class="k">{{ s.0 }}</div><div class="v">{{ s.1 }}<span class="u">{{ s.2 }}</span></div></div>
+    {% endfor %}
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <h3>发布热力图</h3>
+      <div class="hint">近 26 周发布节奏 · 颜色越深当日发布越多</div>
+      <div class="heat">{{ heatmap|safe }}</div>
+      <div class="legend">少 {% for c in heat_legend %}<i style="background:{{ c }}"></i>{% endfor %} 多</div>
+    </div>
+    <div class="panel">
+      <h3>发布日历 · {{ month_label }}</h3>
+      <div class="hint">有发布的日期以朱砂标记</div>
+      <div class="cal">{{ calendar_html|safe }}</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <h3>内容词云</h3>
+      <div class="hint">按标题、摘要、正文与标签的词频生成</div>
+      <div class="cw">{{ wordcloud|safe }}</div>
+    </div>
+    <div class="panel">
+      <h3>最近文章</h3>
+      <div class="hint">最新创建的 6 篇</div>
+      <table class="recent">
+        <thead><tr><th>标题</th><th>状态</th><th>日期</th><th>赞</th></tr></thead>
+        <tbody>
+        {% for r in recent %}
+          <tr>
+            <td><a href="{{ r.1 }}">{{ r.0 }}</a></td>
+            <td><span class="badge {% if r.2 == 'published' %}pub{% else %}draft{% endif %}">{% if r.2 == 'published' %}已发布{% else %}草稿{% endif %}</span></td>
+            <td>{{ r.3 }}</td><td>{{ r.4 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="gf-empty">还没有文章</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="quick"><a href="/admin/blog/post/add/">＋ 写新文章</a><a href="/admin/blog/post/">全部文章</a><a href="/admin/data/">数据与图床</a></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

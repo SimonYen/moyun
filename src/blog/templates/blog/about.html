@@ -1,0 +1,101 @@
+{% extends "blog/base.html" %}
+
+{% block title %}关于 · 墨韵{% endblock %}
+
+{% block extra_style %}
+<style>
+.about-lead { max-width: 700px; font-size: 1.05rem; line-height: 2; color: hsl(var(--foreground) / 0.9); }
+.about-lead p { margin: 0 0 1.1em; }
+.about-lead p:last-child { margin-bottom: 0; }
+.about-seal {
+  float: right; width: 62px; height: 62px; margin: 4px 0 12px 24px;
+  border-radius: 10px; background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground)); font-size: 2.1rem; line-height: 62px;
+  text-align: center; font-family: var(--font-gf);
+  box-shadow: 0 6px 18px hsl(var(--foreground) / 0.12);
+  transform: rotate(-4deg);
+}
+.about-note {
+  margin-top: 30px; padding: 18px 22px;
+  border-left: 3px solid hsl(var(--primary));
+  background: hsl(var(--surface-2)); border-radius: 0 var(--radius) var(--radius) 0;
+  color: hsl(var(--muted-foreground)); font-size: .93rem; line-height: 1.9;
+}
+.about-item .feature-num { font-family: var(--font-gf); font-size: .8rem; letter-spacing: .1em; }
+@media (max-width: 640px) {
+  .about-lead { font-size: 1rem; line-height: 1.9; }
+  .about-seal { width: 46px; height: 46px; font-size: 1.55rem; line-height: 46px; margin: 2px 0 8px 14px; }
+  .about-note { padding: 14px 16px; font-size: .88rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="shell">
+    <span class="label label-accent">/ 关于</span>
+    <h1>关于墨韵</h1>
+    <p class="lede">一处安静的书写之地。不追热点，不求更新，只把值得留下的慢慢写下来。</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="{% url 'blog:post_list' %}">浏览文章 →</a>
+      <a class="btn btn-ghost" href="{% url 'blog:gallery' %}">翻看相册 →</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="shell">
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>缘起</h2>
+      <span class="aside label">松烟落纸</span>
+    </div>
+    <div class="about-lead">
+      <span class="about-seal" aria-hidden="true">墨</span>
+      <p>「墨韵」取自松烟落纸、墨色缓缓晕开的那一刻 —— 不急不躁，却自有层次。给这里起这个名字，是希望写字的人与读字的人，都能慢一些。</p>
+      <p>这里收着读过的书、走过的路、拍下的光影，和一些说不清来由的念头。想到什么就写什么，写妥当了才放上来，所以更新并不勤快。</p>
+      <p>没有宏大的题目，也不追赶什么。若这些文字恰好让你停下一会儿，就已经很好。</p>
+    </div>
+    <div class="about-note">
+      本站的文字与图片都收在这里，随手写、随手放。若哪天翻到一处错字或一段旧话，也请一笑置之。
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="shell">
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>这里有什么</h2>
+      <span class="aside label">三两小事</span>
+    </div>
+    <div class="feature-grid">
+      <div class="feature about-item">
+        <div class="feature-num">其一</div>
+        <h3>文字</h3>
+        <p>长短不一的记录：随笔、读书札记、旅途见闻。想到哪儿写到哪儿，不成体系。</p>
+      </div>
+      <div class="feature about-item">
+        <div class="feature-num">其二</div>
+        <h3>影像</h3>
+        <p>相册里的图片按文章归类，点开可以慢慢翻。有些是配图，有些只是当时觉得好看。</p>
+      </div>
+      <div class="feature about-item">
+        <div class="feature-num">其三</div>
+        <h3>闲笔</h3>
+        <p>偶尔写点没什么用的东西，权当自娱。读过会心一笑，便算有了着落。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="shell">
+    <div class="empty-state" style="padding: 64px 24px;">
+      <p class="label label-accent">若你也喜欢慢一点的文字</p>
+      <h2 style="margin: 10px 0 22px;">不妨从文章列表开始。</h2>
+      <a class="btn btn-primary" href="{% url 'blog:post_list' %}">浏览全部文章 →</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

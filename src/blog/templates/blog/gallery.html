@@ -1,0 +1,189 @@
+{% extends "blog/base.html" %}
+
+{% block title %}相册 · 墨韵{% endblock %}
+
+{% block extra_style %}
+<style>
+/* 相册网格：只用主题 token，明暗自动适配 */
+.gf-album-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+  gap: 20px;
+}
+.gf-album-item {
+  margin: 0; display: flex; flex-direction: column;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) * 1.5);
+  background: hsl(var(--card)); overflow: hidden;
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.gf-album-item:hover {
+  border-color: hsl(var(--primary) / 0.55); transform: translateY(-3px);
+  box-shadow: 0 12px 30px hsl(var(--foreground) / 0.09);
+}
+.gf-album-open {
+  position: relative; display: block; width: 100%; padding: 0; border: 0;
+  background: hsl(var(--surface-2)); cursor: pointer; overflow: hidden;
+  aspect-ratio: 4 / 3;
+}
+.gf-album-thumb {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  transition: transform .35s ease;
+}
+.gf-album-open:hover .gf-album-thumb { transform: scale(1.055); }
+.gf-album-zoom {
+  position: absolute; right: 10px; bottom: 10px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: .72rem; letter-spacing: .06em;
+  background: hsl(var(--background) / 0.86); color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border)); opacity: 0; transition: opacity .18s ease;
+}
+.gf-album-open:hover .gf-album-zoom, .gf-album-open:focus-visible .gf-album-zoom { opacity: 1; }
+.gf-album-meta { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.gf-album-title {
+  font-size: .95rem; font-weight: 600; line-height: 1.4;
+  color: hsl(var(--foreground)); overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.gf-album-sub, .gf-album-origin {
+  font-size: .74rem; color: hsl(var(--muted-foreground)); line-height: 1.5;
+}
+.gf-album-origin {
+  padding-top: 8px; border-top: 1px dashed hsl(var(--border));
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+/* 灯箱的国风微调：沿用组件默认的 dj-lightbox__* 结构 */
+.gf-lightbox .dj-lightbox__backdrop {
+  background: hsl(220 18% 8% / 0.92); backdrop-filter: blur(6px);
+}
+.gf-lightbox .dj-lightbox__image {
+  border-radius: calc(var(--radius) * 1.5);
+  box-shadow: 0 24px 70px hsl(0 0% 0% / 0.55);
+}
+.gf-lightbox .dj-lightbox__caption {
+  font-family: var(--font-gf); font-size: .92rem; letter-spacing: .02em;
+  color: hsl(var(--background)); background: hsl(var(--foreground) / 0.72);
+  padding: 5px 14px; border-radius: 999px;
+}
+.gf-lightbox .dj-lightbox__prev, .gf-lightbox .dj-lightbox__next {
+  background: hsl(var(--card) / 0.16); border: 1px solid hsl(var(--card) / 0.24);
+  border-radius: 999px; width: 44px; height: 44px; font-size: 1.8rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.gf-lightbox .dj-lightbox__prev { left: 22px; }
+.gf-lightbox .dj-lightbox__next { right: 22px; }
+.gf-lightbox .dj-lightbox__close { font-size: 2.4rem; right: 26px; }
+.gf-lightbox .dj-lightbox__counter {
+  font-family: var(--font-mono); font-size: .76rem; letter-spacing: .1em;
+  background: hsl(var(--foreground) / 0.72); color: hsl(var(--background));
+}
+@media (max-width: 760px) {
+  .gf-album-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .gf-album-meta { padding: 10px 12px 12px; gap: 6px; }
+  .gf-album-zoom { opacity: 1; font-size: .68rem; }
+  .gf-lightbox .dj-lightbox__prev { left: 8px; }
+  .gf-lightbox .dj-lightbox__next { right: 8px; }
+  .gf-lightbox .dj-lightbox__image { max-width: 92vw; max-height: 70vh; }
+  .gf-lightbox .dj-lightbox__caption { font-size: .82rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div dj-root dj-view="blog.views.GalleryView">
+
+  <section class="hero">
+    <div class="shell">
+      <span class="label label-accent">/ 图片收藏</span>
+      <h1>相册</h1>
+      <p class="lede">
+        图片按引用它的文章归类，点开任意一张即可放大翻阅。
+        分类随文章标签自动更新，不必手动整理。
+      </p>
+      <div class="hero-meta">
+        <span class="label">{{ all_count }} 张图片</span>
+        <span class="label">{{ categories|length }} 个分类</span>
+        <span class="label">点开可放大</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="shell">
+    <section class="section">
+      <div class="section-head">
+        <span class="section-num">01</span>
+        <h2>分类</h2>
+        <span class="aside label">{{ current_name }} · {{ total }} 张</span>
+      </div>
+
+      <div class="filter-bar">
+        <button class="chip {% if not tag_slug %}active{% endif %}"
+                dj-click="filter_gallery" data-tag="">全部 · {{ all_count }}</button>
+        {% for cat in categories %}
+          <button class="chip {% if tag_slug == cat.slug %}active{% endif %}"
+                  dj-click="filter_gallery" data-tag="{{ cat.slug }}">#{{ cat.name }} · {{ cat.count }}</button>
+        {% empty %}
+          <span class="label">还没有图片</span>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="section" style="padding-top: 12px;">
+      <div class="section-head">
+        <span class="section-num">02</span>
+        <h2>影像</h2>
+        <span class="aside label">点开可放大</span>
+      </div>
+
+      {% if items %}
+        <div class="gf-album-grid">
+          {% for item in items %}
+            <figure class="gf-album-item" data-key="image-{{ item.id }}">
+              <button type="button" class="gf-album-open"
+                      dj-click="open_lightbox" data-index="{{ item.index }}"
+                      aria-label="放大查看 {{ item.name }}">
+                <img class="gf-album-thumb" src="{{ item.url }}" alt="{{ item.name }}" loading="lazy">
+                <span class="gf-album-zoom">放大 ↗</span>
+              </button>
+              <figcaption class="gf-album-meta">
+                <div class="gf-album-title" title="{{ item.name }}">{{ item.name|truncatechars:28 }}</div>
+                <div class="tag-row">
+                  {% if item.tag_pills %}{{ item.tag_pills|safe }}{% else %}<span class="tag-pill">未归档</span>{% endif %}
+                </div>
+                <div class="gf-album-sub">{{ item.date }} · {{ item.size_kb }} KB</div>
+                {% if item.origin %}
+                  <div class="gf-album-origin" title="{{ item.origin }}">出自《{{ item.origin }}》</div>
+                {% endif %}
+              </figcaption>
+            </figure>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <p class="label">这个分类下还没有图片</p>
+          <p>在文章里插入图片后，会自动按文章标签归档到这里。</p>
+          <button class="chip" dj-click="filter_gallery" data-tag="">查看全部</button>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+
+  {{ lightbox_html|safe }}
+</div>
+
+<script>
+/* 灯箱只有按钮、没有内置键盘 hook；把方向键 / Esc 转成对应按钮的 click。 */
+(function () {
+  document.addEventListener('keydown', function (e) {
+    var box = document.querySelector('.gf-lightbox');
+    if (!box) return;
+    var btn = null;
+    if (e.key === 'Escape') btn = box.querySelector('.dj-lightbox__close');
+    if (e.key === 'ArrowLeft') btn = box.querySelector('.dj-lightbox__prev');
+    if (e.key === 'ArrowRight') btn = box.querySelector('.dj-lightbox__next');
+    if (!btn) return;
+    e.preventDefault();
+    btn.click();
+  });
+})();
+</script>
+{% endblock %}

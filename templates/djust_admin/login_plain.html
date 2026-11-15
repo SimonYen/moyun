@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 | 墨韵 · 后台</title>
+<link rel="icon" href="{% static 'favicon.ico' %}" sizes="any">
+<link rel="apple-touch-icon" href="{% static 'favicon.png' %}">
+<link rel="stylesheet" href="{% static 'css/lxgwwenkai-regular.css' %}">
+<style>
+:root { --ink:#2b2b2b; --muted:#7b756c; --line:#e8e4dc; --paper:#faf8f4; --seal:#B3392C; }
+* { box-sizing:border-box; }
+body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+       background:var(--paper); color:var(--ink); font-family:"LXGW WenKai","Kaiti SC",Georgia,serif;
+       background-image:linear-gradient(90deg,rgba(43,43,43,.025) 1px,transparent 1px);
+       background-size:28px 100%; }
+.card { width:min(420px,calc(100vw - 40px)); background:#fff; border:1px solid var(--line);
+        border-radius:14px; padding:38px 34px 30px; box-shadow:0 8px 30px rgba(43,43,43,.06); text-align:center; }
+.seal { width:46px; height:46px; margin:0 auto 18px; border-radius:9px; background:var(--seal);
+        color:#fff; font-size:24px; line-height:46px; letter-spacing:0; }
+h1 { margin:0 0 6px; font-size:24px; letter-spacing:.12em; }
+.sub { margin:0 0 26px; font-size:13px; color:var(--muted); letter-spacing:.05em; }
+.err { background:#fdecea; color:#a33a2c; border-radius:8px; padding:9px 12px;
+       font-size:13px; margin-bottom:16px; text-align:left; }
+label { display:block; text-align:left; font-size:13px; color:#4a463f; margin:0 0 7px; }
+input { width:100%; padding:11px 13px; border:1px solid #dcd6cc; border-radius:8px;
+        background:#fff; font:inherit; font-size:16px; color:var(--ink); margin-bottom:18px; }
+input:focus { outline:none; border-color:var(--seal); box-shadow:0 0 0 3px rgba(179,57,44,.10); }
+button { width:100%; padding:11px 20px; border:0; border-radius:8px; background:var(--seal);
+         color:#fff; font:inherit; font-size:15px; letter-spacing:.18em; cursor:pointer; margin-top:4px; }
+button:hover { opacity:.9; }
+.back { display:inline-block; margin-top:22px; font-size:12px; color:var(--muted); text-decoration:none; }
+.back:hover { color:var(--seal); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="seal">墨</div>
+    <h1>墨韵 · 后台</h1>
+    <p class="sub">登录以管理文章与图片</p>
+
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="username">用户名</label>
+      <input id="username" name="username" type="text" autocomplete="username" required value="{{ username }}">
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">登 录</button>
+    </form>
+
+    <a class="back" href="/">← 返回墨韵</a>
+  </div>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>删除{{ kind_name }} | 墨韵 · 后台</title>
+<link rel="stylesheet" href="{% static 'css/lxgwwenkai-bold.css' %}">
+<link rel="stylesheet" href="{% static 'css/admin.css' %}">
+</head>
+<body>
+<aside class="side">
+  <h1>墨韵 · 后台</h1>
+  <div class="sub">内容管理与数据总览</div>
+  <nav>
+    <a href="/admin/">仪表盘</a>
+    <a href="/admin/blog/post/">文章管理</a>
+    <a href="/admin/blog/post/add/">写新文章</a>
+    <a href="/admin/blog/tag/">标签管理</a>
+    <a href="/admin/data/">数据与图床</a>
+    <a href="/">查看站点 ↗</a>
+  </nav>
+  <div class="foot">{{ username }} · <a href="/admin/logout/">退出登录</a></div>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h2>删除{{ kind_name }}</h2>
+    <div class="who"><a href="{{ cancel_url }}">← 返回列表</a></div>
+  </div>
+
+  <div class="panel">
+    <div class="confirm">
+      确定要删除{{ kind_name }} <b>{{ title }}</b> 吗？此操作不可撤销。<br>
+      <span class="muted">{{ hint }}</span>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <div class="actions">
+        <button class="btn danger" type="submit">确认删除</button>
+        <a class="btn" href="{{ cancel_url }}">取消</a>
+      </div>
+    </form>
+  </div>
+</main>
+</body>
+</html>

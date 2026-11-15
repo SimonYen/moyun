@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ page_title }} | 墨韵 · 后台</title>
+<link rel="stylesheet" href="{% static 'css/lxgwwenkai-bold.css' %}">
+<link rel="stylesheet" href="{% static 'css/admin.css' %}">
+</head>
+<body>
+<aside class="side">
+  <h1>墨韵 · 后台</h1>
+  <div class="sub">内容管理与数据总览</div>
+  <nav>
+    <a href="/admin/">仪表盘</a>
+    <a href="/admin/blog/post/">文章管理</a>
+    <a href="/admin/blog/post/add/">写新文章</a>
+    <a class="on" href="/admin/blog/tag/">标签管理</a>
+    <a href="/admin/data/">数据与图床</a>
+    <a href="/">查看站点 ↗</a>
+  </nav>
+  <div class="foot">{{ username }} · <a href="/admin/logout/">退出登录</a></div>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h2>{{ page_title }}</h2>
+    <div class="who"><a href="/admin/blog/tag/">← 返回标签列表</a></div>
+  </div>
+
+  <div class="panel">
+    {% if error %}<div class="gf-err">{{ error }}</div>{% endif %}
+    <form method="post" class="panel" style="border:0;box-shadow:none;padding:0;">
+      {% csrf_token %}
+      <div class="gf-row">
+        <label for="name">标签名称 *</label>
+        <input class="gf-input" id="name" name="name" type="text" required value="{{ name }}">
+      </div>
+      <div class="gf-row">
+        <label for="slug">slug（URL 标识）</label>
+        <input class="gf-input" id="slug" name="slug" type="text" value="{{ slug }}">
+        <div class="gf-help">建议用英文或拼音；留空自动生成。中文名称不会自动转成可用的 slug。</div>
+      </div>
+      <div class="tools">
+        <button class="btn primary" type="submit">保存标签</button>
+        <a class="btn" href="/admin/blog/tag/">取消</a>
+      </div>
+    </form>
+  </div>
+</main>
+</body>
+</html>

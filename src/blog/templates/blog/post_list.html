@@ -2,6 +2,31 @@
 
 {% block title %}文章 · 墨韵{% endblock %}
 
+{% block extra_style %}
+<style>
+.stream-hint {
+  margin: 30px 0 10px;
+  text-align: center;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  color: hsl(var(--muted-foreground));
+}
+.stream-hint .stream-dots {
+  color: hsl(var(--primary));
+  letter-spacing: 0.35em;
+  margin-right: 0.5em;
+}
+.stream-more {
+  border: 0; background: none; cursor: pointer;
+  font: inherit; letter-spacing: inherit;
+  color: hsl(var(--muted-foreground));
+  padding: 6px 14px;
+}
+.stream-more:hover { color: hsl(var(--primary)); }
+.stream-more:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div dj-root dj-view="blog.views.PostListView">
 
@@ -11,7 +36,7 @@
       <h1>所有文章</h1>
       <p class="lede">这里收录了写过的文章，按时间排列。</p>
       <div class="hero-meta">
-        <span class="label">{{ posts|length }} 篇文章</span>
+        <span class="label">{{ total }} 篇文章</span>
         <span class="label">{{ tags|length }} 个话题</span>
       </div>
     </div>
@@ -50,39 +75,85 @@
       <div class="section-head">
         <span class="section-num">02</span>
         <h2>文章</h2>
-        <span class="aside label">共 {{ posts|length }} 篇</span>
+        <span class="aside label">共 {{ total }} 篇{% if has_more %} · 已显示 {{ shown }}{% endif %}</span>
       </div>
 
-      {% if posts %}
-        <div class="post-grid">
-          {% for post in posts %}
-            <article class="post-card" data-key="post-{{ post.pk }}">
-              <div class="card-top">
-                <span class="card-num">{{ forloop.counter|stringformat:"02d" }} /</span>
-                <span class="label">{{ post.published_at|date:"Y.m.d" }}</span>
+      {# 不用 dj-stream 容器：DOM 只追加不删除，SSE 下 stream_reset op 无传输通道，筛选切换后旧卡片清不掉。普通容器 + data-key 由 VDOM keyed diff 增删。 #}
+      <div class="post-grid" id="post-stream">
+        {% for post in posts %}
+          <article class="post-card" data-key="post-{{ post.pk }}">
+            <div class="card-top">
+              <span class="card-num">{{ forloop.counter|stringformat:"02d" }} /</span>
+              <span class="label">{{ post.date }}</span>
+            </div>
+            <h3><a href="{{ post.url }}">{{ post.title }}</a></h3>
+            <p class="excerpt">{{ post.excerpt }}</p>
+            <div class="card-foot">
+              <div class="tag-row">
+                {% for tag in post.tags %}
+                  <span class="tag-pill">{{ tag }}</span>
+                {% endfor %}
               </div>
-              <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
-              <p class="excerpt">{{ post.excerpt|default:post.content|truncatechars:140 }}</p>
-              <div class="card-foot">
-                <div class="tag-row">
-                  {% for tag in post.tags.all %}
-                    <span class="tag-pill">{{ tag.name }}</span>
-                  {% endfor %}
-                </div>
-                <span class="label">{{ post.author }}</span>
-              </div>
-            </article>
-          {% endfor %}
-        </div>
-      {% else %}
+              <span class="label">{{ post.author }}</span>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if not shown %}
         <div class="empty-state">
           <p class="label">没有找到文章</p>
           <p>换个关键词或标签再试试。</p>
           <button class="chip" dj-click="clear_filters">重置筛选</button>
+        </div>
+      {% else %}
+        <div class="stream-hint" id="post-sentinel" role="status" aria-live="polite">
+          {% if has_more %}
+            <button type="button" id="load-more-btn" class="stream-more"
+                    dj-click="load_more">
+              <span class="stream-dots" aria-hidden="true">···</span>向下滚动，继续加载
+            </button>
+          {% else %}
+            已经到底 · 共 {{ total }} 篇
+          {% endif %}
         </div>
       {% endif %}
     </section>
 
   </div>
 </div>
+
+{# 滚动到底自动点「加载更多」。djust 1.2.8 的 dj-viewport-bottom 走 window.djust.handleEvent（WebSocket 入口），在本项目纯 SSE/ASGI 部署下会降级成整页 HTTP 重渲染 → 反复重载、分页状态丢失。改成自写 scroll 监听 + 真实 dj-click 按钮，事件由 djust 的 DOM 委托走已验证可用的 SSE message 通道。脚本放在 dj-root 外，不受 VDOM patch 影响，只注册一次。 #}
+<script>
+(function () {
+  var cooldown = false;
+  var timer = null;
+  var ticking = false;
+
+  function maybeLoad() {
+    if (cooldown) return;
+    var btn = document.getElementById('load-more-btn');
+    if (!btn) return;
+    // 距页面底部 120px 以内才预取；内容不足一屏时也会自动补一批。
+    var rest = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
+    if (rest > 120) return;
+    cooldown = true;
+    btn.click();
+    clearTimeout(timer);
+    timer = setTimeout(function () { cooldown = false; }, 700);
+  }
+
+  window.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      ticking = false;
+      maybeLoad();
+    });
+  }, { passive: true });
+
+  // 首屏 / 筛选后内容不足一屏时补一次，避免用户无从触发。
+  setTimeout(maybeLoad, 900);
+})();
+</script>
 {% endblock %}

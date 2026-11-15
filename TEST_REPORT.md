@@ -393,3 +393,78 @@ DjustPerformanceWarning: Large LiveView state detected for
 1. `StreamingHttpResponse must consume synchronous iterators` 仍在：Django 对 SSE / 文件响应使用同步迭代器的性能提示，不影响功能。
 2. state 里的 `posts` 仍约 24KB（6 篇，每篇是完整 Django model + author 对象）。文章增至约 20+ 篇时可能再次接近 100KB。可选优化：列表 / 首页改传精简 dict（title / slug / url / excerpt / published_at / author 字符串 / tags），并截断 `content`；本轮未做。
 3. 本轮改动**尚未上线**，线上仍是更早的版本；等你确认后再同步原分享链接并复核。
+
+---
+
+## 十三、文章列表无限滚动 / 滚动渲染（A 方案）
+
+需求：此前文章列表是 `list(qs[:60])` 硬截断，没有分页；改用滚动到底自动加载下一批，同时不能把刚压下去的 LiveView state / 响应速度带回来。
+
+### 13.1 调研结论更正（重要）
+
+第十四轮调研时判断「`dj-viewport-bottom` + `dj-stream` 在 SSE 模式同样成立」，**实测证明不成立**。djust 1.2.8 在本项目纯 ASGI / SSE（`--no-ws`、无 WebSocket）部署下有三条限制：
+
+| 尝试 | 实测现象 | 根因 |
+| --- | --- | --- |
+| `stream()` / `stream_insert()` / `stream_reset()` 增量 op | op 完全不到浏览器 | `session_utils.py` 明确写「StreamsMixin 的 ops are not delivered to a transport today，`_get_stream_operations()` 无调用者」；另一套 `StreamingMixin` 的 async `stream_insert(name, html)` 要求 `_ws_consumer`，只有 WebSocket 才有 |
+| `dj-stream="posts"` + `streams.posts` 容器 | 卡片只增不减：筛选到空结果时 DOM 里仍残留 29 张旧卡片 | 客户端对 stream 容器是「保留 DOM、只追加」语义；清空本该靠 `stream_reset` op，而该 op 在 SSE 下没有传输通道 |
+| `dj-viewport-bottom="load_more"` | 滚动后卡片数不变，SSE session 反复重建（4+ 个 uuid）、出现 `404 /message/` 与 `[SSE] Message POST failed` | `initInfiniteScroll.dispatch()` 调 `window.djust.handleEvent()`，那是 `liveViewWS`（WebSocket）入口；SSE 下 `liveViewWS` 为 null → 降级成「整页 HTTP 重渲染」→ 页面重载 → `mount()` 重跑，`loaded` 永远回到第一页 |
+
+另外，`get_context_data()` 返回的整个 context 会被 msgpack 序列化进 LiveView state（第十二节已证实）：原来 6 篇完整 Post 对象占 23,969 B。若无限滚动继续把累积的 model 实例放进 context，加载几十篇就会把 100KB 警告带回来。
+
+### 13.2 最终实现
+
+- `src/blog/views.py`
+  - `POSTS_PER_PAGE = 3`（与桌面三列网格一行对齐；调大可减少 SSE 往返）。
+  - `PostListView` 实例只多一个整数 `loaded`（已加载条数）；`query` / `tag_slug` / `loaded` 全是标量。列表一律 `_filtered_qs()` 现查，`.distinct()` 避免多标签 join 产生重复 `data-key`。
+  - 新增 `_post_card()`：把 Post 投影成纯标量 dict（`pk` / `title` / `url` / `date` / `excerpt` / `tags` / `author`），正文 Markdown 不进 context。这也把 12.6 第 2 条留下的「可选优化」落地了。
+  - `load_more` 事件：到底时直接 return，不做无效重渲染；`search` / `filter_tag` / `clear_filters` 一律 `_reset_paging()` 把 `loaded` 归零（等价于 `stream_reset` 的效果）。
+  - 模板 context 用普通 `posts` 变量，不用 `streams.posts`，不用 `dj-stream` 容器。
+- `src/blog/templates/blog/post_list.html`
+  - 容器保持普通 `.post-grid`，卡片保留 `data-key="post-{{ post.pk }}"`；每轮渲染「已加载的全部卡片」，由 VDOM keyed diff 保留已有节点、只 patch 新增节点（实测第一张卡片的 `data-probe` 标记在 3→14 全程保留）。
+  - 容器外放 `#post-sentinel` / `#load-more-btn`（`dj-click="load_more"`），提示必须是容器外的元素，否则会变成滚动哨兵。
+  - `dj-root` 外一段自写脚本：`scroll` 监听（`passive` + `requestAnimationFrame` 节流），距底 120px 内点击按钮，700ms 冷却防连发；首屏延时 900ms 补一次以覆盖「内容不足一屏」的情况。按钮在 `has_more=False` 时不渲染，观察者自然停止。
+
+**为什么这样仍是「用 djust 做滚动渲染」**：事件由 djust 的 `dj-click` DOM 委托走已验证可用的 SSE message 通道，服务端是 djust LiveView 的 `@event_handler` + Rust 模板引擎 + VDOM diff；只是把「触发端」从框架那条 SSE 下不可用的 WebSocket 入口换成自写滚动监听。项目里相册键盘导航也是同样的「自写 JS 转真实 click」模式。
+
+### 13.3 性能：state 不回涨，反而更小
+
+`/posts/` 同会话第 2 次访问的 `serialize_msgpack()`：
+
+| 项 | 改造前 | 改造后 |
+| --- | --- | --- |
+| 整个 state | 32,409 B | **8,203 B**（-74.7%） |
+| `posts` context | 23,969 B（6 个完整 model + author） | **513 B**（3 个标量 dict） |
+| `Large LiveView state` 警告 | — | **0 条**（阈值仍是默认 100KB，未调） |
+
+服务日志跑完 230 项回归后只有 `StreamingHttpResponse must consume synchronous iterators` 一条非致命提示。浏览器实测加载到 14 篇（3→6→9→12→14）期间无警告、无 SSE 错误。
+
+### 13.4 回归结果
+
+**230 项 0 失败**（干净单实例 9012，最终代码）：
+
+| 套件 | 项数 | 结果 |
+| --- | --- | --- |
+| HTTP 全量 A–J | 137 | 0 失败 |
+| 桌面 Firefox 全量 | 40 | 0 失败 |
+| 移动端 390×844 | 29 | 0 失败 |
+| 无限滚动专项（新增 `~/.cache/browser_infinite.py`） | 24 | 0 失败 |
+
+专项覆盖：首屏只渲染第一批、分批逐步增长、最终加载全部、到底提示、已有卡片 DOM 节点保留、到底不重复追加、搜索/标签筛选重置分页、空结果容器清空、静态资源无 4xx、无 SSE/JS/控制台错误。测试临时创建 8 篇已发布文章凑够 14 篇，`atexit` 自动清理，回归后业务数据回到 **6 文章 / 5 标签 / 6 图片**。
+
+**验证环境注意**：期间一度出现结果忽上忽下、SSE 反复 404，查明是 9003 端口被两个残留 granian 进程用 `SO_REUSEPORT` 同时监听（沙箱 `ps` 看不到这些进程，`pkill` 杀不掉），请求被随机分到不同进程、内存 state 不共享。换到干净端口 9011 / 9012 后结果稳定。这与项目里已记录的「残留进程陷阱」一致。
+
+### 13.5 明日手动复测补充清单
+
+1. 打开 `/posts/`：应显示 3 张卡片，右上「共 6 篇 · 已显示 3」，底部「··· 向下滚动，继续加载」。
+2. 缓慢滚到底 → 自动追加 3 张，提示变「已经到底 · 共 6 篇」；再继续滚动，卡片数与提示不再变化，控制台无报错。
+3. 加载过几批后输入关键词或点标签 → 列表立即回到第一批，不残留旧卡片；点「全部」恢复。
+4. 输入不存在的关键词 → 显示「没有找到文章」，文章卡片区为空，且不会继续触发加载。
+5. 手机端（或浏览器窄窗口）重复 1–3：单列、无横向溢出、汉堡菜单正常，滚动加载同样生效。
+6. 想看多批加载：后台再发布 7–8 篇文章，桌面会按 3 篇一批逐次追加；想减少往返把 `views.py` 的 `POSTS_PER_PAGE` 调大即可。
+
+### 13.6 遗留
+
+- 示例文章标题仍是早期的技术向内容（属于文章数据，不是界面文案）；若要换成随笔风格可直接在后台改标题，不影响本轮实现。
+- 本轮及前几轮改动**尚未上线**，线上仍是更早版本；发布平台要求本轮明确说一次「发布 / 上线 / 部署」才允许覆盖原分享链接，等确认后再同步并复核 `/static/vditor/dist/index.min.js`。
+

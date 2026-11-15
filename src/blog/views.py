@@ -6,6 +6,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.utils.html import escape
+from django.utils.text import Truncator
 
 from djust import LiveView
 from djust.components.components.image_lightbox import ImageLightbox
@@ -50,8 +51,39 @@ class HomeView(LiveView):
         return context
 
 
+# 文章列表每批加载几篇。桌面三列网格正好一行，手机端约一屏；
+# 想减少滚动时的 SSE 往返，把这个常量调大即可。
+POSTS_PER_PAGE = 3
+
+
+def _post_card(post):
+    """列表卡片只需要这几个字段，绝不要把 Post 实例放进 context。
+
+    djust 会把整个 render context 序列化进 LiveView state（实测 6 篇 Post
+    对象含 Markdown 正文约 24KB）。无限滚动会累积条目，若继续塞 model 实例，
+    加载几十篇就会重新触发 Large LiveView state 警告并拖慢每次 SSE 事件。
+    这里投影成纯标量 dict，每篇只有几百字节。
+    """
+    return {
+        'pk': post.pk,
+        'title': post.title,
+        'url': post.get_absolute_url(),
+        'date': (
+            timezone.localtime(post.published_at).strftime('%Y.%m.%d')
+            if post.published_at else ''
+        ),
+        'excerpt': Truncator(post.excerpt or post.content or '').chars(140),
+        'tags': [t.name for t in post.tags.all()],
+        'author': str(post.author),
+    }
+
+
 class PostListView(LiveView):
-    """Post archive with live search + tag filter (no page reload)."""
+    """文章归档：实时搜索 + 标签筛选 + 滚动到底自动加载下一批。
+
+    分页状态只有一个整数 loaded（已加载条数）。列表永远由数据库现查，
+    不进实例属性，也不把 Post 对象放进 context / state。
+    """
 
     template_name = "blog/post_list.html"
     login_required = False  # public blog archive
@@ -59,8 +91,9 @@ class PostListView(LiveView):
     def mount(self, request, **kwargs):
         self.query: str = ""
         self.tag_slug: str = kwargs.get("tag_slug", "") or ""
+        self.loaded: int = POSTS_PER_PAGE
 
-    def _filtered(self):
+    def _filtered_qs(self):
         qs = _published()
         if self.tag_slug:
             qs = qs.filter(tags__slug=self.tag_slug)
@@ -70,30 +103,65 @@ class PostListView(LiveView):
                 | Q(excerpt__icontains=self.query)
                 | Q(content__icontains=self.query)
             )
-        return list(qs[:60])
+        # 一篇文章可挂多个标签，join 可能产生重复行，重复 data-key 会让
+        # VDOM 降级成位置 diff。
+        return qs.distinct()
+
+    def _reset_paging(self):
+        """筛选条件变了，回到第一批（等价于 stream_reset）。"""
+        self.loaded = POSTS_PER_PAGE
+
+    @event_handler()
+    def load_more(self, **kwargs):
+        """滚到底时由 #load-more-btn 的 dj-click 发过来，再取一批。
+
+        已经到底时直接返回，不做任何改动，避免无效的 SSE 重渲染。
+        """
+        total = self._filtered_qs().count()
+        if self.loaded >= total:
+            return
+        self.loaded = min(self.loaded + POSTS_PER_PAGE, total)
 
     @event_handler()
     def search(self, value: str = "", **kwargs):
         """Live search-as-you-type (dj-input, debounced client-side)."""
         self.query = (value or "").strip()
+        self._reset_paging()
 
     @event_handler()
     def filter_tag(self, tag: str = "", **kwargs):
         """Toggle a tag filter chip."""
         self.tag_slug = "" if self.tag_slug == tag else tag
+        self._reset_paging()
 
     @event_handler()
     def clear_filters(self, **kwargs):
         self.query = ""
         self.tag_slug = ""
+        self._reset_paging()
 
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        qs = self._filtered_qs()
+        total = qs.count()
+        # 每轮渲染都重新给出「已加载的全部条目」：卡片带 data-key，
+        # VDOM 做 keyed diff，已有卡片保留 DOM 节点，只把新卡片 patch 进去。
+        cards = [_post_card(p) for p in qs[:self.loaded]]
+
+        # 用普通 context 变量，不用 streams.posts / dj-stream 容器：
+        # djust 1.2.8 的 StreamsMixin 增量 op 在 SSE 下没有传输通道，
+        # 客户端对 stream 容器是「只追加不删除」，筛选切换时旧卡片清不掉。
+        # 普通列表 + data-key 由 VDOM 做 keyed diff，增删都正确。
+        # 每轮重发的是已加载的全部卡片（纯标量 dict，几十篇也只有十几 KB），
+        # 已有节点因 data-key 被保留，只有新增节点会被 patch 进 DOM。
         context = super().get_context_data(**kwargs)
         context.update(
-            posts=self._filtered(),
+            posts=cards,
             tags=_tags_with_counts(),
             query=self.query,
             tag_slug=self.tag_slug,
+            total=total,
+            shown=len(cards),
+            has_more=self.loaded < total,
         )
         return context
 

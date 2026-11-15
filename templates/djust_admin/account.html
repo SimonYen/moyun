@@ -1,0 +1,87 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>账号设置 | 墨韵 · 后台</title>
+<link rel="stylesheet" href="{% static "css/lxgwwenkai-bold.css" %}">
+<style>
+:root { --ink:#2b2b2b; --muted:#7b756c; --line:#e8e4dc; --paper:#faf8f4; --seal:#B3392C; --blue:#2A5CAA; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:"LXGW WenKai","Kaiti SC",Georgia,serif; }
+a { color:inherit; text-decoration:none; }
+.side { position:fixed; inset:0 auto 0 0; width:232px; background:#22201e; color:#e9e4da; padding:22px 16px; }
+.side h1 { margin:0 0 4px; font-size:18px; letter-spacing:.08em; }
+.side .sub { color:#8d8579; font-size:12px; margin-bottom:28px; }
+.side nav a { display:block; padding:10px 12px; border-radius:8px; font-size:14px; color:#c9c2b6; margin-bottom:4px; }
+.side nav a:hover { background:#35312c; color:#fff; }
+.side nav a.on { background:var(--seal); color:#fff; }
+.side .foot { position:absolute; bottom:22px; left:16px; right:16px; font-size:12px; color:#8d8579; border-top:1px solid #3a3631; padding-top:14px; }
+.side .foot a { color:#c9c2b6; }
+.main { margin-left:232px; padding:28px 32px 48px; max-width:760px; }
+.head h2 { margin:0 0 6px; font-size:24px; letter-spacing:.06em; }
+.head .hint { color:var(--muted); font-size:13px; margin-bottom:22px; }
+.panel { background:#fff; border:1px solid var(--line); border-radius:12px; padding:24px; box-shadow:0 1px 3px rgba(43,43,43,.04); }
+label { display:block; font-size:13px; margin:16px 0 6px; color:var(--muted); }
+input[type=text], input[type=password] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:14px; background:#fffdf9; color:var(--ink); }
+input:focus { outline:2px solid #d8b9ae; border-color:var(--seal); }
+.note { font-size:12px; color:var(--muted); margin-top:6px; }
+.msg { padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:16px; }
+.msg.ok { background:#e8f2e9; color:#3d6b45; }
+.msg.err { background:#fbe9e6; color:#a33c2e; }
+button { margin-top:22px; padding:10px 22px; border:0; border-radius:8px; background:var(--seal); color:#fff; font:inherit; font-size:14px; cursor:pointer; }
+button:hover { opacity:.9; }
+.warn { margin-top:22px; padding:14px 16px; background:#fbf3e8; border:1px solid #ecd9bd; border-radius:8px; font-size:13px; color:#8a6b3f; }
+@media (max-width:760px) { .side { position:static; width:auto; } .side .foot { position:static; margin-top:18px; } .main { margin-left:0; padding:20px; } }
+</style>
+</head>
+<body>
+<aside class="side">
+  <h1>墨韵 · 后台</h1>
+  <div class="sub">内容管理与数据总览</div>
+  <nav>
+    <a href="/admin/">仪表盘</a>
+    <a href="/admin/blog/post/">文章管理</a>
+    <a href="/admin/blog/post/add/">写新文章</a>
+    <a href="/admin/blog/tag/">标签管理</a>
+    <a href="/admin/data/">数据与图床</a>
+    <a class="on" href="/admin/account/">账号设置</a>
+    <a href="/">查看站点 ↗</a>
+  </nav>
+  <div class="foot">{{ username }} · <a href="/admin/logout/">退出登录</a></div>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h2>账号设置</h2>
+    <div class="hint">修改后台登录用户名和密码，保存后立即生效，当前会话不会掉线。</div>
+  </div>
+
+  <section class="panel">
+    {% if success %}<div class="msg ok">{{ success }}</div>{% endif %}
+    {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+    <form method="post" action="/admin/account/">
+      {% csrf_token %}
+      <label for="id_username">用户名</label>
+      <input type="text" id="id_username" name="username" value="{{ username }}" required autocomplete="username">
+      <div class="note">留空不行；用户名不能与其他账号重复。</div>
+
+      <label for="id_current">当前密码</label>
+      <input type="password" id="id_current" name="current_password" required autocomplete="current-password">
+      <div class="note">任何修改都需要验证当前密码。</div>
+
+      <label for="id_new">新密码（不改就留空）</label>
+      <input type="password" id="id_new" name="new_password" autocomplete="new-password">
+      <div class="note">至少 8 位；建议大小写字母、数字和符号混用。</div>
+
+      <label for="id_confirm">确认新密码</label>
+      <input type="password" id="id_confirm" name="confirm_password" autocomplete="new-password">
+
+      <button type="submit">保存修改</button>
+    </form>
+    <div class="warn">站点一旦公开到公网，请立刻把默认的 <strong>admin / admin</strong> 改掉。仓库里保存的是数据库文件，改完记得把新的 db.sqlite3 提交回去，否则下次发布会被旧数据覆盖。</div>
+  </section>
+</main>
+</body>
+</html>

@@ -8,8 +8,6 @@ export PORT="${PORT:-8000}"
 export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-dev-secret-key-do-not-use-in-production}"
 export DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-*}"
 export DJANGO_CSRF_TRUSTED_ORIGINS="${DJANGO_CSRF_TRUSTED_ORIGINS:-https://*.app.workbuddy.host,http://localhost,http://127.0.0.1}"
-export BLOG_ADMIN_PASSWORD="${BLOG_ADMIN_PASSWORD:-admin12345}"
-export SKIP_DEMO_DATA="${SKIP_DEMO_DATA:-}"
 # 传输模式：1 = WebSocket（默认），0 = 回退 SSE（平台不转发 WS 时用）
 export BLOG_USE_WEBSOCKET="${BLOG_USE_WEBSOCKET:-1}"
 
@@ -29,11 +27,13 @@ if [ -d static/vditor/_bundle ] && [ ! -f static/vditor/dist/index.min.js ]; the
     cp -r static/vditor/_bundle/. static/vditor/dist/
 fi
 
-# 初始化数据库 + 管理员 + 示例数据
+# 图床目录可能因清空数据而为空（git 不跟踪空目录），启动时补回来。
+mkdir -p media/images
+
+# 只做数据库迁移。管理员账号与内容数据都随 db.sqlite3 提交，没有 bootstrap 步骤。
 # 注意：djust 在生产模式下有 3 个既有检查 ERROR（ALLOWED_HOSTS='*'、占位 SECRET_KEY、未配 CHANNEL_LAYERS）
 # 因此迁移必须加 --skip-checks，否则所有 manage.py 命令都会失败
 $PYTHON manage.py migrate --noinput --skip-checks >/dev/null 2>&1 || true
-$PYTHON bootstrap.py >/dev/null 2>&1 || true
 
 # 清理旧进程（重新部署时防端口占用）
 if command -v pkill >/dev/null 2>&1; then

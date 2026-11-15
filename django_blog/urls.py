@@ -5,6 +5,7 @@ from django.views.generic import RedirectView
 from djust.admin_ext import site as admin_site
 from djust.sse import sse_urlpatterns
 
+from blog.admin_account import admin_account
 from blog.admin_dashboard import admin_dashboard
 from blog.admin_data import data_page, export_blog, import_blog
 from blog.admin_editor import admin_post_edit
@@ -32,6 +33,7 @@ urlpatterns = [
     path('admin/logout/', admin_logout),
     path('admin/login/', admin_login),
     path('admin/', admin_dashboard),
+    path('admin/account/', admin_account),
     path('admin/blog/post/add/', admin_post_edit),
     path('admin/blog/post/', admin_post_list),
     path('admin/blog/post/<int:object_id>/delete/', admin_post_delete),
